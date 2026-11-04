@@ -78,7 +78,7 @@ jobs:
         run: |
           docker rm -f pixsy 2>/dev/null || true
           docker run -d --name pixsy --restart unless-stopped \
-            -p 62006:8080 \
+            -p 127.0.0.1:62006:8080 \
             -v /opt/pixsy/data:/app/data \
             pixsy:latest
 
@@ -86,8 +86,8 @@ jobs:
       - name: Smoke test
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:62006/api/config > /dev/null; then
-              echo "pixsy is up on :62006"
+            if curl -fsS http://127.0.0.1:8080/api/config > /dev/null; then
+              echo "pixsy is up on :8080"
               exit 0
             fi
             sleep 2
