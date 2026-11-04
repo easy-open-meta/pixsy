@@ -273,14 +273,22 @@ func normalizeLskyBase(raw string) (string, error) {
 }
 
 func (s *Server) runLskyMigration(ctx context.Context, job lskyJob) error {
-	client := &http.Client{Timeout: lskyClientTimeout}
+	// API 调用不跟随重定向：Laravel 在未认证且没带 JSON Accept 时会 302 到
+	// /login 的 HTML 页面，跟随过去只会得到一个伪装成 200 的登录页。
+	apiClient := &http.Client{
+		Timeout: lskyClientTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	downloadClient := &http.Client{Timeout: lskyClientTimeout}
 
-	token, err := lskyLogin(ctx, client, job.baseURL, job.email, job.password)
+	token, err := lskyLogin(ctx, apiClient, job.baseURL, job.email, job.password)
 	if err != nil {
 		return err
 	}
 
-	items, err := lskyListImages(ctx, client, job.baseURL, token)
+	items, err := lskyListImages(ctx, apiClient, job.baseURL, token)
 	if err != nil {
 		return err
 	}
@@ -296,7 +304,7 @@ func (s *Server) runLskyMigration(ctx context.Context, job lskyJob) error {
 		}
 		name := item.displayName()
 		s.migrator.setCurrent(fmt.Sprintf("%s（%d/%d）", name, i+1, len(items)))
-		s.migrator.recordRow(s.migrateLskyImage(ctx, client, job, item, maxBytes))
+		s.migrator.recordRow(s.migrateLskyImage(ctx, downloadClient, job, item, maxBytes))
 	}
 	if ctx.Err() != nil {
 		return errMigrationCancelled
@@ -379,6 +387,8 @@ func lskyLogin(ctx context.Context, client *http.Client, base, email, password s
 		if err != nil {
 			return "", err
 		}
+		// 关键：不带 JSON Accept 时 Laravel 会把异常请求 302 到 /login 的 HTML。
+		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Content-Type", "application/json")
 		res, err := client.Do(req)
 		if err != nil {
@@ -397,10 +407,14 @@ func lskyLogin(ctx context.Context, client *http.Client, base, email, password s
 			}
 			continue
 		}
+		if res.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("Lsky 登录接口异常（HTTP %d）%s", res.StatusCode, lskyHint(res.StatusCode))
+		}
 
 		var out lskyTokenResp
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return "", fmt.Errorf("Lsky 登录响应无法解析（HTTP %d）", res.StatusCode)
+		if err := json.Unmarshal(trimBOM(raw), &out); err != nil {
+			return "", fmt.Errorf("Lsky 登录响应不是 JSON（HTTP %d，Content-Type: %s）%s",
+				res.StatusCode, res.Header.Get("Content-Type"), lskyHint(res.StatusCode))
 		}
 		if !out.Status || out.Data.Token == "" {
 			msg := strings.TrimSpace(out.Message)
@@ -465,6 +479,7 @@ func lskyListImages(ctx context.Context, client *http.Client, base, token string
 		if err != nil {
 			return nil, err
 		}
+		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 		res, err := client.Do(req)
 		if err != nil {
@@ -476,14 +491,21 @@ func lskyListImages(ctx context.Context, client *http.Client, base, token string
 			return nil, fmt.Errorf("读取 Lsky 图片清单失败：%w", readErr)
 		}
 
-		var out lskyPageResp
-		if err := json.Unmarshal(raw, &out); err != nil {
-			return nil, fmt.Errorf("Lsky 图片清单响应无法解析（HTTP %d），请确认是 Lsky Pro 2.x", res.StatusCode)
+		if res.StatusCode == http.StatusUnauthorized {
+			return nil, errors.New("Lsky 认证失败（401），请检查账号密码，或确认该站点已启用 API")
 		}
-		if res.StatusCode != http.StatusOK || !out.Status {
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("读取 Lsky 图片清单失败（HTTP %d）%s", res.StatusCode, lskyHint(res.StatusCode))
+		}
+		var out lskyPageResp
+		if err := json.Unmarshal(trimBOM(raw), &out); err != nil {
+			return nil, fmt.Errorf("Lsky 图片清单响应不是 JSON（HTTP %d，Content-Type: %s）%s",
+				res.StatusCode, res.Header.Get("Content-Type"), lskyHint(res.StatusCode))
+		}
+		if !out.Status {
 			msg := strings.TrimSpace(out.Message)
 			if msg == "" {
-				msg = fmt.Sprintf("HTTP %d", res.StatusCode)
+				msg = "未知错误"
 			}
 			return nil, fmt.Errorf("读取 Lsky 图片清单失败：%s", msg)
 		}
@@ -497,6 +519,22 @@ func lskyListImages(ctx context.Context, client *http.Client, base, token string
 		lastPage = out.Data.LastPage
 	}
 	return all, nil
+}
+
+// trimBOM 去掉部分 PHP 部署会在 JSON 前输出的 UTF-8 BOM（json.Unmarshal 不接受）。
+func trimBOM(b []byte) []byte {
+	return bytes.TrimPrefix(b, []byte("\xef\xbb\xbf"))
+}
+
+// lskyHint 针对常见失败状态码给出排查提示。
+func lskyHint(status int) string {
+	switch {
+	case status >= 300 && status < 400:
+		return "，接口被重定向到登录页，请确认该 Lsky 站点已启用 API"
+	case status == http.StatusNotFound:
+		return "，接口不存在，请确认地址和 Lsky 版本"
+	}
+	return ""
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) error {

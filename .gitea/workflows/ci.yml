@@ -65,6 +65,9 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     runs-on: go-vue
+    env:
+      # 宿主机映射端口，restart 与 smoke test 共用，避免两处写死后不一致
+      HOST_PORT: 62006
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -73,21 +76,22 @@ jobs:
         run: docker build -t pixsy:latest .
 
       # 先建新容器再删旧的会有端口冲突，因此顺序为：停旧的 → 起新的（秒级中断）
-      # 宿主 8080 被占用时改这里的 -p 左侧端口（右侧 8080 是容器内监听端口，不要动）
       - name: (Re)start container
         run: |
           docker rm -f pixsy 2>/dev/null || true
           docker run -d --name pixsy --restart unless-stopped \
-            -p 127.0.0.1:62006:8080 \
+            -p 127.0.0.1:${HOST_PORT}:8080 \
             -v /opt/pixsy/data:/app/data \
             pixsy:latest
 
-      # 冒烟：/config 返回 200 即视为启动成功；失败时打出容器日志方便定位
+      # 冒烟：必须命中 /api/v1/config 并返回站点配置 JSON 才算就绪。
+      # 不能只看 HTTP 200——SPA 兜底路由对任意未知路径都会返回 index.html 200，
+      # 所以这里同时校验响应里含 site_name 字段。
       - name: Smoke test
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/api/config > /dev/null; then
-              echo "pixsy is up on :8080"
+            if curl -fsS "http://127.0.0.1:${HOST_PORT}/api/v1/config" | grep -q '"site_name"'; then
+              echo "pixsy is up on 127.0.0.1:${HOST_PORT}"
               exit 0
             fi
             sleep 2

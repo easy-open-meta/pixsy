@@ -36,6 +36,11 @@ func fakeLsky(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		// 模拟 Laravel：没有 JSON Accept 时重定向到登录页的 HTML
+		if r.Header.Get("Accept") != "application/json" {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
 		var in map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		if in["email"] != "lsky@example.com" || in["password"] != "lsky-pass" {
@@ -46,8 +51,14 @@ func fakeLsky(t *testing.T) *httptest.Server {
 	})
 
 	mux.HandleFunc("/api/v1/images", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Accept") != "application/json" {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer lsky-token" {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"status":false,"message":"Unauthenticated.","data":{}}`))
 			return
 		}
 		items := []map[string]any{
