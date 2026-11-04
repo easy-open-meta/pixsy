@@ -413,8 +413,8 @@ func lskyLogin(ctx context.Context, client *http.Client, base, email, password s
 
 		var out lskyTokenResp
 		if err := json.Unmarshal(trimBOM(raw), &out); err != nil {
-			return "", fmt.Errorf("Lsky 登录响应不是 JSON（HTTP %d，Content-Type: %s）%s",
-				res.StatusCode, res.Header.Get("Content-Type"), lskyHint(res.StatusCode))
+			return "", fmt.Errorf("Lsky 登录响应不是预期的 JSON（HTTP %d，Content-Type: %s）：%v",
+				res.StatusCode, res.Header.Get("Content-Type"), err)
 		}
 		if !out.Status || out.Data.Token == "" {
 			msg := strings.TrimSpace(out.Message)
@@ -427,13 +427,13 @@ func lskyLogin(ctx context.Context, client *http.Client, base, email, password s
 	}
 }
 
+// lskyImage 只保留迁移用得到的字段。Lsky 的 size 是 float（模型里 cast 为 'float'，
+// JSON 形如 70.0），解析成整型会失败，所以不声明未使用的数字字段；字符串字段对新版本也更宽容。
 type lskyImage struct {
 	Name       string `json:"name"`
 	OriginName string `json:"origin_name"`
 	Pathname   string `json:"pathname"`
 	Extension  string `json:"extension"`
-	Size       int64  `json:"size"`
-	MimeType   string `json:"mimetype"`
 	Links      struct {
 		URL string `json:"url"`
 	} `json:"links"`
@@ -499,8 +499,8 @@ func lskyListImages(ctx context.Context, client *http.Client, base, token string
 		}
 		var out lskyPageResp
 		if err := json.Unmarshal(trimBOM(raw), &out); err != nil {
-			return nil, fmt.Errorf("Lsky 图片清单响应不是 JSON（HTTP %d，Content-Type: %s）%s",
-				res.StatusCode, res.Header.Get("Content-Type"), lskyHint(res.StatusCode))
+			return nil, fmt.Errorf("Lsky 图片清单响应不是预期的 JSON（HTTP %d，Content-Type: %s）：%v",
+				res.StatusCode, res.Header.Get("Content-Type"), err)
 		}
 		if !out.Status {
 			msg := strings.TrimSpace(out.Message)

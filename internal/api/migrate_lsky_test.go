@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,22 +62,13 @@ func fakeLsky(t *testing.T) *httptest.Server {
 			_, _ = w.Write([]byte(`{"status":false,"message":"Unauthenticated.","data":{}}`))
 			return
 		}
-		items := []map[string]any{
-			{
-				"name": "a.png", "origin_name": "a.png", "pathname": "2024/01/a.png",
-				"extension": "png", "size": len(pngs["/i/a.png"]),
-				"links": map[string]string{"url": srv.URL + "/i/a.png"},
-			},
-			{
-				"name": "b.png", "origin_name": "b.png", "pathname": "2024/01/b.png",
-				"extension": "png", "size": len(pngs["/i/b.png"]),
-				"links": map[string]string{"url": srv.URL + "/i/b.png"},
-			},
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": true, "message": "success",
-			"data": map[string]any{"data": items, "last_page": 1, "total": len(items)},
-		})
+		// size 用浮点字面量（70.0），复现 Lsky 模型把 size cast 成 float 的真实响应。
+		items := fmt.Sprintf(`[
+			{"name":"a.png","origin_name":"a.png","pathname":"2024/01/a.png","extension":"png","size":70.0,"mimetype":"image/png","links":{"url":"%[1]s/i/a.png"}},
+			{"name":"b.png","origin_name":"b.png","pathname":"2024/01/b.png","extension":"png","size":34.0,"mimetype":"image/png","links":{"url":"%[1]s/i/b.png"}}
+		]`, srv.URL)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"status":true,"message":"success","data":{"data":%s,"current_page":1,"last_page":1,"total":2}}`, items)
 	})
 
 	for path, data := range pngs {
