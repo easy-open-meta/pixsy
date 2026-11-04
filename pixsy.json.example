@@ -1,0 +1,14 @@
+{
+  "port": 8080,
+  "data": "./data",
+  "base_url": "",
+  "jwt_secret": "",
+  "static_dir": "",
+  "settings": {
+    "site_name": "pixsy",
+    "allow_register": true,
+    "allow_upload": true,
+    "max_upload_mb": 20,
+    "max_batch": 10
+  }
+}

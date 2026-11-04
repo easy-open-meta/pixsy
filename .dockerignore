@@ -1,0 +1,29 @@
+# 构建上下文裁剪：只保留 Go 与前端源码，加速构建并避免本地数据泄入镜像。
+# 注意：data/ 含 SQLite 数据库与自动生成的 jwt.secret，绝不打入构建上下文。
+
+# 版本控制
+.git
+.gitignore
+
+# 本地运行数据与密钥
+data
+
+# 本地构建产物
+bin
+pixsy
+pixsy.exe
+pixsy.exe~
+web/node_modules
+web/dist
+
+# 文档与任务记录
+*.md
+docs
+tasks
+
+# 部署与构建配置（镜像内用不到）
+deploy
+Makefile
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,13 @@
+# pixsy 容器编排（设计文档 §5.3）：docker compose up -d --build
+# 数据持久化在宿主机 ./data，升级镜像时保留。
+services:
+  pixsy:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      # 图片外链前缀（如 CDN 域名）；留空则按请求 Host 生成，本地使用无需设置
+      # - PIXSY_BASE_URL=https://img.example.com
+      # 生产环境建议显式指定 JWT 密钥（勿提交真实值到仓库）
+      # - PIXSY_JWT_SECRET=change-me
+    volumes: ["./data:/app/data"]
+    restart: unless-stopped

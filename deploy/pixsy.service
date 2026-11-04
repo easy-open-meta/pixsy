@@ -1,0 +1,31 @@
+# pixsy systemd 服务单元（Linux 原生部署，设计文档 §5.3）。
+#
+# 安装步骤（假设二进制位于 /opt/pixsy/pixsy）：
+#   sudo useradd -r -s /usr/sbin/nologin pixsy
+#   sudo mkdir -p /opt/pixsy/data && sudo chown -R pixsy:pixsy /opt/pixsy
+#   sudo cp deploy/pixsy.service /etc/systemd/system/pixsy.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pixsy
+#
+# 修改监听地址 / 数据目录 / 环境变量后需执行 sudo systemctl daemon-reload。
+
+[Unit]
+Description=pixsy image host
+After=network.target
+
+[Service]
+User=pixsy
+Group=pixsy
+WorkingDirectory=/opt/pixsy
+ExecStart=/opt/pixsy/pixsy --addr :8080 --data /opt/pixsy/data
+Restart=on-failure
+RestartSec=5
+
+# 基本加固：服务以专用低权限用户运行，仅数据目录可写。
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

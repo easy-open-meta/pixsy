@@ -1,0 +1,58 @@
+/* 设计令牌（§4.3）：中性灰阶 + 单一主色，深浅色跟随系统。 */
+:root {
+  color-scheme: light dark;
+
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f1f3f5;
+  --border: #e3e6ea;
+  --text: #1a1d21;
+  --text-muted: #6b7280;
+
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-weak: #eff6ff;
+  --on-primary: #ffffff;
+
+  --danger: #dc2626;
+  --danger-weak: #fef2f2;
+  --success: #16a34a;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+
+  --transition: 150ms ease;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --font: system-ui, -apple-system, "Segoe UI", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif;
+  --container: 1120px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111417;
+    --surface: #191d22;
+    --surface-2: #20262c;
+    --border: #2c333b;
+    --text: #e8eaed;
+    --text-muted: #9aa4ae;
+
+    --primary: #3b82f6;
+    --primary-hover: #60a5fa;
+    --primary-weak: #172335;
+    --on-primary: #ffffff;
+
+    --danger: #f87171;
+    --danger-weak: #2a1a1a;
+    --success: #4ade80;
+
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
