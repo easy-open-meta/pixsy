@@ -1,0 +1,45 @@
+# Gitea Actions CI（语法兼容 GitHub Actions，由 Gitea 从 .gitea/workflows/ 识别）。
+# 流程：前端构建（vue-tsc 类型检查 + vite 打包）→ go vet → go test → 发布参数构建。
+# 注意：web/embed.go 使用 go:embed all:dist，必须先产出 web/dist 才能执行任何 go 命令。
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # npm run build 内含 vue-tsc --noEmit，前端类型检查随构建一并完成
+      - name: Build web
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      # 与 Makefile BUILD_FLAGS 保持一致，验证发布构建路径（CGO_ENABLED=0 静态单文件）
+      - name: Build binary
+        run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o pixsy ./cmd/pixsy
