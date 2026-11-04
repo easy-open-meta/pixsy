@@ -77,7 +77,7 @@ func newEnvSeeded(t *testing.T, seed func(*testEnv)) *testEnv {
 	env.settings = settings
 
 	apiSrv := api.New(api.Options{DB: db, Settings: settings, Store: store, Auth: mgr})
-	srv := server.New(server.Options{API: apiSrv.Handler(), Store: store})
+	srv := server.New(server.Options{API: apiSrv.Handler(), Store: store, DB: db})
 	env.handler = srv.Handler()
 	return env
 }

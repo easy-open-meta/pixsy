@@ -70,6 +70,15 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- 旧站点（如 Lsky Pro）的 URL 路径 → 内容哈希，用于无缝衔接已发布的旧链接。
+CREATE TABLE IF NOT EXISTS image_aliases (
+  alias      TEXT PRIMARY KEY,
+  hash       TEXT NOT NULL,
+  ext        TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_aliases_hash ON image_aliases(hash);
 `
 
 // Migrate creates missing tables and indexes.

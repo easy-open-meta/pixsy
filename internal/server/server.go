@@ -2,6 +2,7 @@
 package server
 
 import (
+	"database/sql"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pixsy/pixsy/internal/model"
 	"github.com/pixsy/pixsy/internal/storage"
 )
 
@@ -18,8 +20,9 @@ import (
 type Options struct {
 	API       http.Handler // /api/v1 处理器
 	Store     *storage.Store
-	Static    fs.FS  // 内嵌前端产物（以 dist 为根）
-	StaticDir string // 非空时从磁盘读取前端产物（开发热更新）
+	DB        *sql.DB // 旧路径别名查询（可为 nil）
+	Static    fs.FS   // 内嵌前端产物（以 dist 为根）
+	StaticDir string  // 非空时从磁盘读取前端产物（开发热更新）
 	Logger    *slog.Logger
 }
 
@@ -27,6 +30,7 @@ type Options struct {
 type Server struct {
 	api       http.Handler
 	store     *storage.Store
+	db        *sql.DB
 	static    fs.FS
 	staticDir string
 	logger    *slog.Logger
@@ -38,6 +42,7 @@ func New(opts Options) *Server {
 	s := &Server{
 		api:       opts.API,
 		store:     opts.Store,
+		db:        opts.DB,
 		static:    opts.Static,
 		staticDir: opts.StaticDir,
 		logger:    opts.Logger,
@@ -48,7 +53,8 @@ func New(opts Options) *Server {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", s.api)
-	mux.HandleFunc("GET /i/{name}", s.serveOriginal)
+	// 路径通配：既支持 /i/<hash>.<ext>，也支持 Lsky 风格的 /i/2025/06/20/x.png 旧链接。
+	mux.HandleFunc("GET /i/{path...}", s.serveOriginal)
 	mux.HandleFunc("GET /t/{name}", s.serveThumb)
 	mux.HandleFunc("/", s.serveStatic)
 	s.mux = mux
@@ -62,7 +68,15 @@ func (s *Server) Handler() http.Handler { return s.logRequests(s.mux) }
 
 // serveOriginal 直出原图：/i/{hash}.{ext}（§3.5：零重定向、永久缓存、CDN 友好）。
 func (s *Server) serveOriginal(w http.ResponseWriter, r *http.Request) {
-	hash, ext, ok := splitName(r.PathValue("name"))
+	name := r.PathValue("path")
+	hash, ext, ok := splitName(name)
+	if !ok && s.db != nil {
+		// 旧站路径别名：/i/2025/06/20/x.png → 内容哈希，保证历史文章链接直接可用。
+		if a, err := model.FindAlias(r.Context(), s.db, name); err == nil {
+			hash, ext = a.Hash, a.Ext
+			ok = validHash(hash)
+		}
+	}
 	if !ok {
 		notFound(w)
 		return

@@ -91,6 +91,7 @@ func run(args []string, logger *slog.Logger) error {
 	srv := server.New(server.Options{
 		API:       apiSrv.Handler(),
 		Store:     store,
+		DB:        db,
 		Static:    web.Dist(),
 		StaticDir: cfg.StaticDir,
 		Logger:    logger,

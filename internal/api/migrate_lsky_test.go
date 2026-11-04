@@ -65,7 +65,7 @@ func fakeLsky(t *testing.T) *httptest.Server {
 		// size 用浮点字面量（70.0），复现 Lsky 模型把 size cast 成 float 的真实响应。
 		items := fmt.Sprintf(`[
 			{"name":"a.png","origin_name":"a.png","pathname":"2024/01/a.png","extension":"png","size":70.0,"mimetype":"image/png","links":{"url":"%[1]s/i/a.png"}},
-			{"name":"b.png","origin_name":"b.png","pathname":"2024/01/b.png","extension":"png","size":34.0,"mimetype":"image/png","links":{"url":"%[1]s/i/b.png"}}
+			{"name":"b.png","origin_name":"b.png","pathname":"2024/01/b c.png","extension":"png","size":34.0,"mimetype":"image/png","links":{"url":"%[1]s/i/b.png"}}
 		]`, srv.URL)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = fmt.Fprintf(w, `{"status":true,"message":"success","data":{"data":%s,"current_page":1,"last_page":1,"total":2}}`, items)
@@ -147,11 +147,32 @@ func TestLskyMigration(t *testing.T) {
 	if len(list.Data.Images) != 2 {
 		t.Fatalf("图片数 = %d, want 2", len(list.Data.Images))
 	}
+	var aHash, aExt string
 	for _, img := range list.Data.Images {
 		res, _ := env.get("/i/" + img.Hash + "." + img.Ext)
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("原图 %s 不可访问: HTTP %d", img.Filename, res.StatusCode)
 		}
+		if img.Filename == "a.png" {
+			aHash, aExt = img.Hash, img.Ext
+		}
+	}
+
+	// 旧 Lsky 路径无缝可用：/i/2024/01/a.png 返回与哈希路径相同的内容。
+	oldRes, oldBody := env.get("/i/2024/01/a.png")
+	if oldRes.StatusCode != http.StatusOK {
+		t.Fatalf("旧路径别名不可访问: HTTP %d", oldRes.StatusCode)
+	}
+	_, newBody := env.get("/i/" + aHash + "." + aExt)
+	if !bytes.Equal(oldBody, newBody) {
+		t.Fatal("旧路径与哈希路径的内容不一致")
+	}
+	// 文件名带空格时，浏览器发出的 %20 编码路径同样能命中别名。
+	if res, _ := env.get("/i/2024/01/b%20c.png"); res.StatusCode != http.StatusOK {
+		t.Fatalf("含空格的旧路径不可访问: HTTP %d", res.StatusCode)
+	}
+	if res, _ := env.get("/i/2024/01/missing.png"); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("未知旧路径应 404, got %d", res.StatusCode)
 	}
 
 	// 映射 CSV 同时包含旧链接与新链接。

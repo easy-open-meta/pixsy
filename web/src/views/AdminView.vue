@@ -217,8 +217,8 @@ async function downloadMapping(): Promise<void> {
     <section class="card">
       <h2>从 Lsky Pro 迁移图片</h2>
       <p class="small muted">
-        迁移在服务器后台进行，图片导入到当前管理员账号；关闭页面不影响进度。完成后可下载「旧链接 →
-        新链接」映射表，用于替换文章里已引用的旧地址。
+        迁移在服务器后台进行，图片导入到当前管理员账号；关闭页面不影响进度。迁移会记录旧站路径别名，
+        历史文章里的 /i/… 链接换域名后可直接访问；也可下载「旧链接 → 新链接」映射表自行替换。
       </p>
       <form @submit.prevent="startMigrate">
         <div class="field">

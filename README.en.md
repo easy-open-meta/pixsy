@@ -19,7 +19,8 @@ pixsy is a self-hosted image hosting service written in Go + Vue 3. The frontend
 - **Zero external dependencies** — SQLite (pure-Go driver, no CGO) + local disk storage; cross-compilation friendly
 - **Content-addressed dedup** — images are stored by SHA-256 hash, so identical content is stored only once; deleting an image keeps the file on disk while other records still reference it
 - **Automatic thumbnails** — a JPEG thumbnail (max side 350px) is generated on upload for faster listing pages
-- **Multiple formats** — JPEG / PNG / GIF / WebP
+- **Multiple formats** — JPEG / PNG / GIF / WebP / ICO
+- **Seamless old links** — migrating from Lsky Pro records old path aliases automatically, so existing `/i/…` links in articles keep working after switching domains
 - **Multiple link formats** — one-click copy as URL / Markdown / HTML / BBCode
 - **Users & permissions** — JWT authentication; the first registered user automatically becomes the admin; the login endpoint is rate-limited
 - **Online admin panel** — site name, open registration, open upload, per-file and per-batch limits; changes take effect immediately, no restart needed
@@ -117,7 +118,12 @@ The service listens on `:8080` and stores data in `/opt/pixsy/data` by default; 
 
 # Custom port and data directory
 .\pixsy-windows-amd64.exe --addr :8080 --data D:\pixsy\data
+
+# Or drop pixsy.json next to the exe (port and site settings live there) and just double-click
+# See pixsy.json.example
 ```
+
+On Windows the page opens in your default browser after startup (disable with `--open-browser=false` or `"open_browser": false` in the config file).
 
 Without make installed, cross-compile manually on any machine that has Go:
 
@@ -142,16 +148,60 @@ Once the service is up, `curl http://127.0.0.1:8080/api/v1/config` should return
 
 ## Configuration
 
-Priority: **command-line flag > `PIXSY_*` environment variable > default value**.
+Priority: **command-line flag > `PIXSY_*` environment variable > configuration file > default value**.
 
 | Flag | Environment variable | Default | Description |
 | --- | --- | --- | --- |
+| `--config` | `PIXSY_CONFIG` | empty (auto-loads `pixsy.json` from the current directory) | Configuration file path (JSON) |
 | `--addr` | `PIXSY_ADDR` | `:8080` | HTTP listen address |
 | `--data` | `PIXSY_DATA` | `./data` | Data directory (SQLite and image files) |
 | `--base-url` | `PIXSY_BASE_URL` | empty | Prefix for external image links (e.g. a CDN domain); empty means generated from the request Host |
 | `--max-upload-mb` | `PIXSY_MAX_UPLOAD_MB` | `20` | Default per-file limit (MB) seeded into settings on first start; adjustable at runtime |
 | `--jwt-secret` | `PIXSY_JWT_SECRET` | empty | JWT signing secret; if empty, one is generated and stored in the data directory |
 | `--static-dir` | `PIXSY_STATIC_DIR` | empty | Frontend static assets directory; empty uses the embedded build (for dev hot reload) |
+| `--open-browser` | `PIXSY_OPEN_BROWSER` | `true` on Windows, `false` elsewhere | Open the page in the default browser after startup; disable with `--open-browser=false` |
+
+### Configuration file (pixsy.json)
+
+Without `--config`, the program automatically loads `pixsy.json` from the **current directory** (ignored if absent). On Windows, double-clicking the exe or running it from Task Scheduler makes the working directory the exe's directory, so simply place the file next to the exe — no startup arguments needed. See `pixsy.json.example`.
+
+Minimal config to change the port:
+
+```json
+{ "port": 8090 }
+```
+
+Full example:
+
+```json
+{
+  "port": 8080,
+  "data": "./data",
+  "base_url": "",
+  "jwt_secret": "",
+  "static_dir": "",
+  "settings": {
+    "site_name": "pixsy",
+    "allow_register": true,
+    "allow_upload": true,
+    "max_upload_mb": 20,
+    "max_batch": 10
+  }
+}
+```
+
+| Key | Description |
+| --- | --- |
+| `port` | Listen port (`1~65535`), equivalent to `addr: ":<port>"`; mutually exclusive with `addr` |
+| `addr` | Full listen address, e.g. `":8080"` or `"127.0.0.1:8080"` |
+| `data` | Data directory |
+| `base_url` | Prefix for external image links (e.g. a CDN domain) |
+| `jwt_secret` | JWT signing secret; generated automatically if empty |
+| `static_dir` | Frontend static assets directory; empty uses the embedded build |
+| `open_browser` | Open the browser after startup; `true` by default on Windows, `false` elsewhere |
+| `settings.*` | Site settings from the admin panel; meanings and defaults under "Site settings" below |
+
+Semantics of `settings`: **every key present in the file overrides the admin panel on each startup**; keys you leave out are untouched (values edited in the panel survive restarts). Invalid values (e.g. an out-of-range `max_upload_mb`) make startup fail with a clear error instead of being silently ignored. Unknown keys in the file are rejected as well.
 
 ### Data directory layout
 
@@ -180,7 +230,7 @@ Runtime settings live in the database and take effect immediately:
 ### Web UI
 
 - **Home**: multi-select upload with per-file progress, paginated browsing of "My images" / "All images" (admin only), one-click link copying, deletion
-- **Admin panel** (admin): site name, toggles and limits
+- **Admin panel** (admin): site name, toggles and limits; visual Lsky Pro migration (progress, cancel, URL-mapping CSV)
 
 ### API
 
@@ -197,7 +247,11 @@ Every endpoint returns a unified envelope: success is `{"data": ...}`, failure i
 | DELETE | `/api/v1/images/{id}` | Delete an image | Bearer |
 | GET | `/api/v1/admin/settings` | View site settings | Admin |
 | PUT | `/api/v1/admin/settings` | Update site settings | Admin |
-| GET | `/i/{hash}.{ext}` | Serve the original image (Range supported) | - |
+| POST | `/api/v1/admin/migrate/lsky` | Start an Lsky Pro migration (JSON: `base_url` / `email` / `password`) | Admin |
+| GET | `/api/v1/admin/migrate/lsky` | Migration progress (poll) | Admin |
+| POST | `/api/v1/admin/migrate/lsky/cancel` | Cancel the migration | Admin |
+| GET | `/api/v1/admin/migrate/lsky/csv` | Download the URL-mapping CSV (old → new) | Admin |
+| GET | `/i/{hash}.{ext}` | Serve the original image (Range supported); Lsky legacy path aliases `/i/{pathname}` created by migration work as well | - |
 | GET | `/t/{hash}.jpg` | Serve the thumbnail | - |
 
 #### curl examples
@@ -254,7 +308,7 @@ pixsy/
 ├── internal/
 │   ├── api/          # REST API handlers
 │   ├── auth/         # JWT auth, middleware, login rate limiting
-│   ├── config/       # Startup config (flag > env > defaults)
+│   ├── config/       # Startup config (flag > env > config file > defaults)
 │   ├── httpx/        # Unified JSON response / error envelope
 │   ├── model/        # SQLite data access
 │   ├── server/       # Routing, static assets and image serving

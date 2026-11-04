@@ -49,6 +49,7 @@ var knownFormats = map[string]string{
 	"png":  "image/png",
 	"gif":  "image/gif",
 	"webp": "image/webp",
+	"ico":  "image/x-icon",
 }
 
 // MimeForExt 返回已知扩展名对应的 MIME。
@@ -117,8 +118,8 @@ func (s *Store) Save(ctx context.Context, r io.Reader, maxBytes int64) (*Result,
 		_ = os.Remove(tmpPath) // 幂等：成功 rename 后这里只是空操作
 	}()
 
-	// 先读前 32 字节判定真实格式（§3.4 step 3）。
-	head := make([]byte, 32)
+	// 先读前 4KB 判定真实格式（§3.4 step 3）：ICO 的目录条目需要多于 32 字节。
+	head := make([]byte, 4096)
 	n, err := io.ReadFull(r, head)
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("read upload head: %w", err)
@@ -140,13 +141,24 @@ func (s *Store) Save(ctx context.Context, r io.Reader, maxBytes int64) (*Result,
 		return nil, ErrTooLarge
 	}
 
-	// 只解码头取宽高：GIF 不整帧解码，避免大动图内存放大（§3.4）。
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("rewind temp file: %w", err)
-	}
-	cfg, _, err := image.DecodeConfig(tmp)
-	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
-		return nil, ErrUnsupported
+	// 取宽高：ICO 直接读目录头（标准库不支持解码 ICO）；其余格式只解码头，
+	// GIF 不整帧解码，避免大动图内存放大（§3.4）。
+	width, height := 0, 0
+	if f.ext == "ico" {
+		w, h, ok := icoDims(head)
+		if !ok {
+			return nil, ErrUnsupported
+		}
+		width, height = w, h
+	} else {
+		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+			return nil, fmt.Errorf("rewind temp file: %w", err)
+		}
+		cfg, _, err := image.DecodeConfig(tmp)
+		if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
+			return nil, ErrUnsupported
+		}
+		width, height = cfg.Width, cfg.Height
 	}
 
 	hash := hex.EncodeToString(h.Sum(nil))
@@ -155,8 +167,8 @@ func (s *Store) Save(ctx context.Context, r io.Reader, maxBytes int64) (*Result,
 		Ext:    f.ext,
 		Mime:   f.mime,
 		Size:   written,
-		Width:  cfg.Width,
-		Height: cfg.Height,
+		Width:  width,
+		Height: height,
 	}
 
 	dst := s.Path(hash, f.ext)
@@ -176,8 +188,11 @@ func (s *Store) Save(ctx context.Context, r io.Reader, maxBytes int64) (*Result,
 
 	// 缩略图尽力而为：原图此时已可用，解码失败（如动画 WebP）只跳过缩略图，
 	// 不能让已落盘的上传整体失败；去重路径顺带补建历史缺失的缩略图。
-	if err := s.ensureThumb(dst, hash); err != nil {
-		slog.Warn("thumbnail skipped", "hash", hash, "err", err)
+	// ICO 无法用标准库解码，直接跳过——前端缩略图 404 时会回退到原图。
+	if f.ext != "ico" {
+		if err := s.ensureThumb(dst, hash); err != nil {
+			slog.Warn("thumbnail skipped", "hash", hash, "err", err)
+		}
 	}
 	return res, nil
 }
@@ -264,6 +279,35 @@ func sniff(head []byte) (format, bool) {
 		return format{ext: "gif", mime: "image/gif"}, true
 	case len(head) >= 12 && string(head[:4]) == "RIFF" && string(head[8:12]) == "WEBP":
 		return format{ext: "webp", mime: "image/webp"}, true
+	// ICO：reserved(2)=0 + type(2)=1(图标) + count(2)>0。光标文件(type=2)不接受。
+	case len(head) >= 6 && head[0] == 0 && head[1] == 0 && head[2] == 1 && head[3] == 0 &&
+		(head[4] != 0 || head[5] != 0):
+		return format{ext: "ico", mime: "image/x-icon"}, true
 	}
 	return format{}, false
+}
+
+// icoDims 从 ICO 目录里取最大一帧的宽高（条目里 0 表示 256）。
+func icoDims(head []byte) (width, height int, ok bool) {
+	if len(head) < 6 {
+		return 0, 0, false
+	}
+	count := int(head[4]) | int(head[5])<<8
+	for i := 0; i < count; i++ {
+		off := 6 + 16*i
+		if off+2 > len(head) {
+			break
+		}
+		w, h := int(head[off]), int(head[off+1])
+		if w == 0 {
+			w = 256
+		}
+		if h == 0 {
+			h = 256
+		}
+		if w*h > width*height {
+			width, height = w, h
+		}
+	}
+	return width, height, width > 0
 }

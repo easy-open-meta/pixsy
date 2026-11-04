@@ -17,6 +17,7 @@ import (
 
 	"github.com/pixsy/pixsy/internal/auth"
 	"github.com/pixsy/pixsy/internal/httpx"
+	"github.com/pixsy/pixsy/internal/model"
 	"github.com/pixsy/pixsy/internal/storage"
 )
 
@@ -358,6 +359,13 @@ func (s *Server) migrateLskyImage(ctx context.Context, client *http.Client, job 
 		slog.Error("lsky migrate record failed", "url", lskyURL, "err", err)
 		row.Error = "写入图片记录失败"
 		return row
+	}
+
+	// 记录旧路径别名：Lsky 的 /i/{pathname} 换域名后在新站原样可访问。
+	if aliasPath := strings.Trim(strings.TrimSpace(item.Pathname), "/"); aliasPath != "" {
+		if err := model.InsertAlias(ctx, s.db, aliasPath, img.Hash, img.Ext); err != nil {
+			slog.Warn("lsky alias insert failed", "alias", aliasPath, "err", err)
+		}
 	}
 
 	raw := job.pixsyBase + "/i/" + img.Hash + "." + img.Ext

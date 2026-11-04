@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"os"
 	"testing"
 
@@ -131,5 +132,60 @@ func TestSaveAnimatedWebpKeepsUpload(t *testing.T) {
 	}
 	if again.Hash != res.Hash {
 		t.Fatalf("dedup hash = %s, want %s", again.Hash, res.Hash)
+	}
+}
+
+// icoBytes 组装一个 ICO：ICONDIR + 单帧条目 + 载荷。
+// Save 只读目录头取宽高，不解码帧，所以载荷用现成的静态 WebP 填充即可。
+func icoBytes(width, height byte, payload []byte) []byte {
+	dir := []byte{0, 0, 1, 0, 1, 0} // reserved=0, type=1(icon), count=1
+	entry := make([]byte, 16)
+	entry[0], entry[1] = width, height                             // 0 表示 256
+	binary.LittleEndian.PutUint16(entry[4:], 1)                    // planes
+	binary.LittleEndian.PutUint16(entry[6:], 32)                   // bit count
+	binary.LittleEndian.PutUint32(entry[8:], uint32(len(payload))) // bytes in resource
+	binary.LittleEndian.PutUint32(entry[12:], 22)                  // 图像数据偏移
+	return append(append(dir, entry...), payload...)
+}
+
+func TestSaveICO(t *testing.T) {
+	s := openStore(t)
+	res, err := s.Save(context.Background(), bytes.NewReader(icoBytes(32, 32, staticWebp)), 1<<20)
+	if err != nil {
+		t.Fatalf("Save ico: %v", err)
+	}
+	if res.Ext != "ico" || res.Mime != "image/x-icon" {
+		t.Fatalf("ext/mime = %q/%q, want ico/image/x-icon", res.Ext, res.Mime)
+	}
+	if res.Width != 32 || res.Height != 32 {
+		t.Fatalf("dims = %d×%d, want 32×32", res.Width, res.Height)
+	}
+	if _, err := os.Stat(s.Path(res.Hash, res.Ext)); err != nil {
+		t.Fatalf("original not committed: %v", err)
+	}
+	// ICO 无法解码，不生成缩略图，前端会回退到原图。
+	if _, err := os.Stat(s.ThumbPath(res.Hash)); !os.IsNotExist(err) {
+		t.Fatalf("thumb should be absent, got err = %v", err)
+	}
+}
+
+func TestSaveICODimsZeroMeans256(t *testing.T) {
+	s := openStore(t)
+	res, err := s.Save(context.Background(), bytes.NewReader(icoBytes(0, 0, staticWebp)), 1<<20)
+	if err != nil {
+		t.Fatalf("Save ico: %v", err)
+	}
+	if res.Width != 256 || res.Height != 256 {
+		t.Fatalf("dims = %d×%d, want 256×256", res.Width, res.Height)
+	}
+}
+
+func TestSaveCursorRejected(t *testing.T) {
+	s := openStore(t)
+	raw := icoBytes(32, 32, staticWebp)
+	raw[2] = 2 // type=2 是光标（.cur），不在白名单内
+	_, err := s.Save(context.Background(), bytes.NewReader(raw), 1<<20)
+	if !errors.Is(err, storage.ErrUnsupported) {
+		t.Fatalf("err = %v, want ErrUnsupported", err)
 	}
 }

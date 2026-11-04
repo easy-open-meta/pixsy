@@ -429,10 +429,12 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusInternalServerError, "删除失败")
 		return
 	}
-	// 内容寻址：仅当没有其它记录引用同一 hash 时才删除磁盘文件（§3.1）。
+	// 内容寻址：仅当没有其它记录引用同一 hash 时才删除磁盘文件（§3.1），
+	// 同时清理指向它的旧路径别名。
 	refs, err := model.CountImagesByHash(ctx, s.db, img.Hash)
 	if err == nil && refs == 0 {
 		_ = s.store.Remove(img.Hash, img.Ext)
+		_ = model.DeleteAliasesByHash(ctx, s.db, img.Hash)
 	}
 	httpx.Data(w, http.StatusOK, map[string]any{"deleted": true, "id": id})
 }
