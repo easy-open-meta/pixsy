@@ -1,5 +1,6 @@
 # Gitea Actions CI（语法兼容 GitHub Actions，由 Gitea 从 .gitea/workflows/ 识别）。
-# 流程：前端构建（vue-tsc 类型检查 + vite 打包）→ go vet → go test → 发布参数构建。
+# 流程：前端构建（vue-tsc 类型检查 + vite 打包）→ go vet → go test → 发布参数构建
+#       → main/master 分支构建镜像并重启 pixsy 容器。
 # 注意：web/embed.go 使用 go:embed all:dist，必须先产出 web/dist 才能执行任何 go 命令。
 name: CI
 
@@ -44,3 +45,58 @@ jobs:
       # 与 Makefile BUILD_FLAGS 保持一致，验证发布构建路径（CGO_ENABLED=0 静态单文件）
       - name: Build binary
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o pixsy ./cmd/pixsy
+
+  # ---------------------------------------------------------------------------
+  # 部署：test 通过 + main/master 分支 push 才执行（PR 不部署）。
+  # 运行标签与 test 保持一致（go-vue），因此该 runner 必须能直接调用 docker。
+  #   · host 模式 runner（config.yaml 里 go-vue:host）：宿主机装 docker 即可，本文件无需改动。
+  #   · container 模式 runner（go-vue:docker://镜像）：需在 config.yaml 增加
+  #       container:
+  #         valid_volumes: ["/var/run/docker.sock"]
+  #     并给本 job 加 container.options 挂载 socket：
+  #       container:
+  #         options: --volume /var/run/docker.sock:/var/run/docker.sock
+  # 前端产物：由 Dockerfile 阶段 1（node:20 → npm ci && npm run build）生成 web/dist，
+  #   阶段 2 go:embed 进二进制，故镜像自带最新前端，宿主机无需装 Node/Go。
+  # 数据持久化：固定挂宿主机 /opt/pixsy/data。切勿改成 ./data —— runner 的 workspace
+  #   是临时目录，任务结束会被清理，数据会一起消失。
+  # ---------------------------------------------------------------------------
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: go-vue
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t pixsy:latest .
+
+      # 先建新容器再删旧的会有端口冲突，因此顺序为：停旧的 → 起新的（秒级中断）
+      # 宿主 8080 被占用时改这里的 -p 左侧端口（右侧 8080 是容器内监听端口，不要动）
+      - name: (Re)start container
+        run: |
+          docker rm -f pixsy 2>/dev/null || true
+          docker run -d --name pixsy --restart unless-stopped \
+            -p 8080:8080 \
+            -v /opt/pixsy/data:/app/data \
+            pixsy:latest
+
+      # 冒烟：/config 返回 200 即视为启动成功；失败时打出容器日志方便定位
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/api/config > /dev/null; then
+              echo "pixsy is up on :8080"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "pixsy failed to become ready, last logs:"
+          docker logs --tail 50 pixsy || true
+          exit 1
+
+      # 只保留最近构建，避免 runner 磁盘被历史镜像撑满
+      - name: Prune dangling images
+        if: always()
+        run: docker image prune -f
