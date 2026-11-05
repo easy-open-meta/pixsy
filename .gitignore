@@ -35,5 +35,9 @@ Thumbs.db
 # 打包产物（可用 ZipArchive 重新生成）
 plugins/*.zip
 
+# 发行安装包（make package 生成到 deploy/；deploy/pixsy.service 仍入库）
+deploy/*.tar.gz
+deploy/*.zip
+
 # 本地 git worktree
 .worktree-arranger/

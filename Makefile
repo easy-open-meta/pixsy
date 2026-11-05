@@ -5,10 +5,11 @@ BINARY      := pixsy
 CMD         := ./cmd/pixsy
 WEB_DIR     := web
 BIN_DIR     := bin
+DIST_DIR    := deploy
 # 与设计文档 §5.2 Dockerfile 的构建参数保持一致：去除路径信息、裁剪符号表。
 BUILD_FLAGS := -trimpath -ldflags "-s -w"
 
-.PHONY: help web build linux windows all docker test vet clean
+.PHONY: help web build linux windows all package docker test vet clean
 
 help: ## 显示可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
@@ -29,6 +30,9 @@ windows: web ## 交叉编译 windows-amd64 单文件到 bin/
 
 all: linux windows ## 构建全部分发产物
 
+package: linux windows ## 打包 Linux(amd64/arm64)+Windows(amd64) 安装包到 deploy/
+	go run ./scripts/package
+
 docker: ## 构建 Docker 镜像（多阶段构建，容器内完成前端与后端编译）
 	docker build -t $(BINARY) .
 
@@ -40,3 +44,4 @@ vet: ## 静态检查
 
 clean: ## 清理构建产物
 	rm -rf $(BIN_DIR) $(BINARY) $(BINARY).exe
+	rm -f $(DIST_DIR)/*.tar.gz $(DIST_DIR)/*.zip

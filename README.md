@@ -62,6 +62,7 @@ go build -o pixsy ./cmd/pixsy
 make linux    # 交叉编译 linux-amd64 / linux-arm64 静态单文件到 bin/
 make windows  # 交叉编译 windows-amd64 到 bin/
 make all      # 全部分发产物
+make package  # 打包 Linux(amd64/arm64)+Windows(amd64) 安装包到 deploy/（含 systemd unit 与说明文件）
 ```
 
 产物为 `CGO_ENABLED=0` 的静态单文件（SQLite 使用纯 Go 驱动，无 libc 依赖）：Linux 产物可直接在任意发行版上运行，Windows 产物见下文。未安装 make 时可手动执行等价命令：
