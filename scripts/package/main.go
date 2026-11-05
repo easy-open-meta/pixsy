@@ -44,6 +44,8 @@ func main() {
 	if ver == "" {
 		ver = gitVersion()
 	}
+	// tag 习惯带 v 前缀（v1.0.0），文件名统一不带
+	ver = strings.TrimPrefix(ver, "v")
 
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fail("创建输出目录失败: %v", err)
@@ -189,17 +191,21 @@ func writeZipFile(zw *zip.Writer, name, src string) error {
 	return err
 }
 
-// gitVersion 取版本号，取不到时用 dev。
+// gitVersion 取版本号，优先级：最近的 git tag > 仓库根目录 VERSION 文件 > dev。
+// 用 --abbrev=0 而不是 --always：无 tag 时 fail 而不是退化成提交哈希，
+// 让 VERSION 文件接手（浅克隆的 CI 环境同样可靠）。
 func gitVersion() string {
-	out, err := exec.Command("git", "describe", "--tags", "--always").Output()
-	if err != nil {
-		return "dev"
+	if out, err := exec.Command("git", "describe", "--tags", "--abbrev=0").Output(); err == nil {
+		if v := strings.TrimSpace(string(out)); v != "" {
+			return v
+		}
 	}
-	v := strings.TrimSpace(string(out))
-	if v == "" {
-		return "dev"
+	if b, err := os.ReadFile("VERSION"); err == nil {
+		if v := strings.TrimSpace(string(b)); v != "" {
+			return v
+		}
 	}
-	return v
+	return "dev"
 }
 
 func fail(format string, args ...any) {
