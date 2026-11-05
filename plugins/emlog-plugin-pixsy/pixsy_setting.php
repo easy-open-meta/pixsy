@@ -29,6 +29,7 @@ function plugin_setting_view()
         <p class="text-muted small">
             接管资源上传：后台「资源」上传的图片将直接上传到 pixsy 图床，文章使用 pixsy 返回的外链。
             站点地址形如 <code>https://img.example.com</code>，不带末尾斜杠。
+            <a href="./plugin_user.php?plugin=pixsy">从 pixsy 导入已有图库 &raquo;</a>
         </p>
         <?php if ($hasToken): ?>
             <div class="alert alert-success py-2 small">pixsy 认证有效，token 至 <?= htmlspecialchars(date('Y-m-d H:i', $tokenExpire)) ?> 前有效。</div>

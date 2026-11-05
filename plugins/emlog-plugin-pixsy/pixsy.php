@@ -4,7 +4,7 @@ Plugin Name: pixsy图床
 Version: 1.0.0
 Plugin URL: https://github.com/ck_yeun9/pixsy
 Description: 接管 emlog 资源上传，将图片上传到 pixsy 图床并使用 pixsy 返回的外链。在插件设置里填写 pixsy 站点地址与账号，支持 token 自动刷新与删除文章资源时同步删除 pixsy 上的图片。
-Author: ck_yeun9
+Author: 易开元(EOM)
 Author URL: https://github.com/ck_yeun9
 */
 
