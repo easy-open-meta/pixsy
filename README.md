@@ -2,9 +2,13 @@
 
 > 自托管的轻量图床：单二进制、零外部依赖、开箱即用。
 
+![Version](https://img.shields.io/badge/version-1.0.0-4F46E5)
 ![Go](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white)
 ![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-embedded-003B57?logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-yjj6731%2Fpixsy-2496ED?logo=docker&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows-6B7280)
+![License](https://img.shields.io/badge/license-MIT-16A34A)
 
 简体中文 | [English](README.en.md)
 
