@@ -11,23 +11,38 @@
   --bg:#F7F8FB; --card:#FFFFFF; --line:#E4E7F0;
   --ink:#14172B; --muted:#5A607A; --faint:#9AA0B8;
   --accent:#4F46E5; --accent-soft:#EEF0FE; --accent-line:#C9CDF8;
+  --nav-bg:rgba(247,248,251,.88); --row-hover:#FAFBFE; --code-inline:#3F3AA8;
   --code-bg:#12141F; --code-ink:#D6DAEA; --code-dim:#7C82A0;
   --ok:#16A34A;
   --radius:14px;
   --sans:-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
   --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
 }
+:root[data-theme="dark"]{
+  --bg:#0F1118; --card:#171A24; --line:#272B3D;
+  --ink:#E8EAF4; --muted:#A6ACc6; --faint:#6C7290;
+  --accent:#818CF8; --accent-soft:#232743; --accent-line:#3D4372;
+  --nav-bg:rgba(15,17,24,.88); --row-hover:#1B1F2C; --code-inline:#A5B4FC;
+  --ok:#4ADE80;
+}
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1.65;font-size:16px}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1.65;font-size:16px;transition:background .2s ease,color .2s ease}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
 
+/* ---------- 主题切换按钮 ---------- */
+.theme-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--line);background:var(--card);border-radius:8px;color:var(--muted);cursor:pointer;flex:none}
+.theme-btn:hover{color:var(--ink);border-color:var(--accent-line)}
+.theme-btn svg{width:16px;height:16px}
+:root[data-theme="dark"] .icon-moon{display:none}
+:root:not([data-theme="dark"]) .icon-sun{display:none}
+
 /* ---------- 导航 ---------- */
-.nav{position:sticky;top:0;z-index:50;background:rgba(247,248,251,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav{position:sticky;top:0;z-index:50;background:var(--nav-bg);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .nav-in{display:flex;align-items:center;gap:28px;height:60px}
 .logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:19px;color:var(--ink);letter-spacing:-.02em}
 .logo:hover{text-decoration:none}
@@ -85,7 +100,7 @@ section{padding:72px 0}
 @media (max-width:960px){.grid{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:560px){.grid{grid-template-columns:1fr}}
 .feat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 20px}
-.feat svg{display:block;margin-bottom:14px}
+.feat svg{display:block;margin-bottom:14px;stroke:var(--accent)}
 .feat h3{font-size:15.5px;font-weight:700;margin-bottom:6px}
 .feat p{font-size:13.5px;color:var(--muted);line-height:1.7}
 
@@ -118,7 +133,7 @@ section{padding:72px 0}
 .api{max-width:880px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .api-row{display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line);font-size:13.5px}
 .api-row:last-child{border-bottom:0}
-.api-row:hover{background:#FAFBFE}
+.api-row:hover{background:var(--row-hover)}
 .method{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 0;text-align:center;border-radius:5px;width:64px}
 .m-get{color:#0B72D9;background:#E8F2FD}
 .m-post{color:#0B8A4D;background:#E7F6EE}
@@ -128,6 +143,36 @@ section{padding:72px 0}
 @media (max-width:640px){.api-row{grid-template-columns:64px 1fr}.api-desc{display:none}}
 .api-foot{text-align:center;color:var(--muted);font-size:13.5px;margin-top:20px}
 
+/* ---------- 用户指南 ---------- */
+.guide{background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.gpanel{display:none;max-width:880px;margin:0 auto}
+.gpanel[aria-hidden="false"]{display:block}
+.gtab{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 18px;font-size:13.5px;font-family:var(--sans);color:var(--muted);cursor:pointer}
+.gtab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.guide-toc{background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin:0 0 30px}
+.guide-toc h3{font-size:14px;font-weight:700;margin-bottom:10px}
+.guide-toc ol{margin:0;padding-left:20px;columns:2;column-gap:32px;font-size:13.5px}
+.guide-toc li{margin:5px 0}
+.guide-toc a{color:var(--muted)}
+.guide-toc a:hover{color:var(--accent)}
+@media (max-width:640px){.guide-toc ol{columns:1}}
+.guide h3{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:38px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+.guide h3:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.guide h4{font-size:15.5px;font-weight:700;color:var(--accent);margin:24px 0 8px}
+.guide p{font-size:14.5px;color:var(--muted);margin:10px 0}
+.guide ul,.guide ol{color:var(--muted);font-size:14px;margin:10px 0;padding-left:22px}
+.guide li{margin:6px 0}
+.guide table{width:100%;border-collapse:collapse;font-size:13.5px;margin:14px 0}
+.guide th,.guide td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+.guide th{background:var(--bg);font-weight:600;color:var(--ink)}
+.guide td{color:var(--muted)}
+.guide pre{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.8;margin:14px 0;white-space:pre}
+.guide code{font-family:var(--mono);font-size:.92em;background:var(--accent-soft);color:var(--code-inline);padding:1px 6px;border-radius:4px}
+.guide pre code{background:none;color:inherit;padding:0;font-size:inherit}
+.guide blockquote{border-left:3px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0;padding:10px 16px;margin:16px 0}
+.guide blockquote p{font-size:13.8px;margin:4px 0}
+.guide .gfoot{margin-top:28px;padding-top:16px;border-top:1px solid var(--line);text-align:center;font-size:13px;color:var(--faint)}
+
 /* ---------- 页脚 ---------- */
 footer{border-top:1px solid var(--line);padding:36px 0 44px;text-align:center;color:var(--faint);font-size:13px}
 footer .links{display:flex;gap:22px;justify-content:center;margin-bottom:14px;flex-wrap:wrap}
@@ -135,6 +180,15 @@ footer .links a{color:var(--muted)}
 footer .links a:hover{color:var(--ink)}
 footer p{margin-top:6px}
 </style>
+<script>
+// 主题初始化：优先读本地记忆，其次跟随系统，尽早执行避免闪白
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('pixsy-theme'); } catch (e) {}
+  if (t !== 'light' && t !== 'dark' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+  if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+})();
+</script>
 </head>
 <body>
 
@@ -149,9 +203,14 @@ footer p{margin-top:6px}
       <a href="#features">功能</a>
       <a href="#deploy">部署</a>
       <a href="#ecosystem">生态</a>
+      <a href="#guide">用户指南</a>
       <a href="#api">API</a>
       <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/design.md">设计文档</a>
     </div>
+    <button class="theme-btn" id="themeToggle" type="button" aria-label="切换深色模式" title="浅色 / 深色模式">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
     <a class="nav-gh" href="https://gitee.com/java-and-net/pixsy" target="_blank" rel="noopener">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.8"/><circle cx="4.5" cy="12.5" r="1.8"/><circle cx="11.5" cy="5.5" r="1.8"/><path d="M4.5 5.3v5.4M11.5 7.3c0 2.4-2.4 2.7-4.3 3.1"/></svg>
       Gitee
@@ -378,6 +437,461 @@ go build -o pixsy ./cmd/pixsy
   </div>
 </section>
 
+<!-- ============ 用户指南 ============ -->
+<section id="guide" class="guide">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>用户指南</h2>
+      <p>写给普通使用者的上手指南：不需要编程基础，照着做就能把自己的图床跑起来。</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="指南语言">
+      <button class="gtab" role="tab" aria-selected="true" aria-controls="guide-zh" id="gt-zh">简体中文</button>
+      <button class="gtab" role="tab" aria-selected="false" aria-controls="guide-en" id="gt-en">English</button>
+    </div>
+
+    <!-- ---------- 中文 ---------- -->
+    <div class="gpanel guide" id="guide-zh" role="tabpanel" aria-labelledby="gt-zh" aria-hidden="false">
+      <div class="guide-toc">
+        <h3>目录</h3>
+        <ol>
+          <li><a href="#zh-what">pixsy 是什么？</a></li>
+          <li><a href="#zh-install">安装部署（三选一）</a></li>
+          <li><a href="#zh-first">第一次使用：注册与登录</a></li>
+          <li><a href="#zh-daily">日常使用：上传、外链、管理</a></li>
+          <li><a href="#zh-admin">管理员后台</a></li>
+          <li><a href="#zh-migrate">从 Lsky Pro 迁移旧图</a></li>
+          <li><a href="#zh-backup">数据备份与升级</a></li>
+          <li><a href="#zh-faq">常见问题 FAQ</a></li>
+          <li><a href="#zh-config">附录：配置一览</a></li>
+        </ol>
+      </div>
+
+      <h3 id="zh-what">1. pixsy 是什么？</h3>
+      <p><b>pixsy 是一个「图床」：把你的图片存到上面，然后给你一个网址链接，你可以把这个链接贴到博客、论坛、微信公众号排版工具等任何地方，图片就能显示出来。</b></p>
+      <p>它和「免费图床网站」的区别是：pixsy 跑在<b>你自己的电脑或服务器</b>上，图片存在你自己的硬盘里——</p>
+      <ul>
+        <li>不用担心第三方图床跑路、限速或者加广告水印；</li>
+        <li>一个文件（约 12MB 的 exe 或约 25MB 的 Docker 镜像）就是整个网站，不用安装数据库；</li>
+        <li>支持的图片格式：<b>JPEG / PNG / GIF（动图）/ WebP / ICO</b>；</li>
+        <li>上传后自动生成缩略图，图片多了以后列表页也刷得快；</li>
+        <li>内容相同的图片自动去重，不会重复占用硬盘。</li>
+      </ul>
+
+      <h3 id="zh-install">2. 安装部署（三选一）</h3>
+      <blockquote><p>三种方式装出来的功能完全一样，选一种顺手的即可。装好后打开 <code>http://localhost:8080</code> 能看到 pixsy 首页，就说明成功了。</p></blockquote>
+
+      <h4>方式 A：Windows 电脑（最简单，双击就能用）</h4>
+      <p>适合：本地自用、内网使用、想先试试看。</p>
+      <ol>
+        <li><b>拿到程序</b>：从 <a href="https://gitee.com/java-and-net/pixsy/releases" target="_blank" rel="noopener">Releases 页面</a> 下载 <code>pixsy_windows_amd64.zip</code>（或在仓库根目录执行 <code>make package</code> 自行打包）。</li>
+        <li><b>解压</b>：把压缩包解压到一个<b>固定的</b>文件夹，比如 <code>D:\pixsy\</code>。里面就一个文件：<code>pixsy-windows-amd64.exe</code>。</li>
+        <li><b>双击运行</b>：第一次运行会弹出 Windows 防火墙提示——只在自己电脑上用就点「取消」；想让局域网里其他设备（如手机）访问，勾选「专用网络」后点「允许访问」。</li>
+        <li>程序会<b>自动打开浏览器</b>进入 pixsy 首页；没弹出来的话，手动访问 <code>http://localhost:8080</code>。</li>
+      </ol>
+      <p><b>想换端口？</b>在 exe 旁边新建一个文本文件，改名并保存为 <code>pixsy.json</code>，内容写成：</p>
+<pre><code>{ "port": 9000 }</code></pre>
+      <p>重新双击 exe，就改用 9000 端口了（完整选项见 <a href="#zh-config">配置附录</a>）。</p>
+      <p><b>想开机自动启动？</b>用 Windows「任务计划程序」注册一次即可，管理员 PowerShell 里执行（把路径换成你的）：</p>
+<pre><code>schtasks /Create /TN pixsy /SC ONSTART /RU SYSTEM /TR "D:\pixsy\pixsy-windows-amd64.exe --addr :8080 --data D:\pixsy\data"</code></pre>
+      <blockquote><p>提示：程序本身是前台黑窗口，双击运行时<b>关掉窗口 = 停止服务</b>，不是崩溃，重新双击即可。</p></blockquote>
+
+      <h4>方式 B：有服务器（Linux）—— 正式使用推荐</h4>
+      <p>适合：有一台云服务器 / NAS / 树莓派，想 7×24 挂着给博客供图。</p>
+      <ol>
+        <li><b>上传并安装</b>（以下命令在服务器上执行）：
+<pre><code># 上传 pixsy_linux_amd64.tar.gz 到服务器后：
+tar -xzf pixsy_linux_amd64.tar.gz          # 解压出 pixsy 可执行文件
+sudo useradd -r -s /usr/sbin/nologin pixsy  # 创建专用的低权限运行账号
+sudo mkdir -p /opt/pixsy/data
+sudo install -m 0755 pixsy /opt/pixsy/pixsy
+sudo chown -R pixsy:pixsy /opt/pixsy</code></pre>
+          <p>ARM 设备（部分 NAS / 树莓派）请用 <code>pixsy_linux_arm64.tar.gz</code>。</p>
+        </li>
+        <li><b>注册成系统服务</b>（开机自启、崩了自动拉起）：
+<pre><code>sudo cp deploy/pixsy.service /etc/systemd/system/pixsy.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now pixsy
+sudo systemctl status pixsy   # 看到 active (running) 就成功了</code></pre>
+        </li>
+        <li><b>验证</b>：浏览器打开 <code>http://服务器IP:8080</code>，或在服务器上执行 <code>curl http://127.0.0.1:8080/api/v1/config</code>，返回一段 JSON 即表示服务正常。</li>
+      </ol>
+      <p>之后改了配置（端口、数据目录等），执行一次 <code>sudo systemctl daemon-reload</code> 再 <code>sudo systemctl restart pixsy</code> 生效。</p>
+      <blockquote><p><b>安全提醒</b>：如果服务器有防火墙/安全组（如阿里云、腾讯云），记得在控制台放行 8080 端口，否则外网访问不了。</p></blockquote>
+
+      <h4>方式 C：Docker（懂容器的一分钟部署）</h4>
+      <p>已有镜像在 Docker Hub：<code>yjj6731/pixsy</code>。</p>
+<pre><code># 最快方式：docker run
+docker run -d -p 8080:8080 -v ./data:/app/data --restart unless-stopped yjj6731/pixsy
+
+# 或在本项目目录用 docker compose（会本地构建镜像）
+docker compose up -d --build</code></pre>
+      <p>数据（数据库 + 图片）持久化在宿主机 <code>./data</code> 目录，升级镜像不会丢。需要自定义时通过环境变量传入：</p>
+<pre><code>environment:
+  - PIXSY_BASE_URL=https://img.example.com   # 图片外链前缀（挂了 CDN 域名时设置）
+  - PIXSY_JWT_SECRET=改成一段随机字符串        # 生产环境建议显式指定</code></pre>
+
+      <h3 id="zh-first">3. 第一次使用：注册与登录</h3>
+      <ol>
+        <li>打开 pixsy 首页（<code>http://localhost:8080</code> 或你的服务器地址）。</li>
+        <li>点右上角「<b>注册</b>」，填 <b>用户名</b>、<b>密码</b>、<b>确认密码</b>，点「注册」。</li>
+        <li>注册成功会自动登录，直接进入上传页面。</li>
+      </ol>
+      <blockquote><p>⭐ <b>重要</b>：<b>第一个注册的用户自动成为管理员</b>。所以自己的服务，装好后第一件事就是去注册，管理员身份就是你的了。之后注册的都是普通用户。</p></blockquote>
+      <p>后台可以随时<b>关闭开放注册</b>（见 <a href="#zh-admin">管理员后台</a>），关闭后只有已有账号能登录——个人自用建议注册完就关掉，防止陌生人来传图。</p>
+
+      <h3 id="zh-daily">4. 日常使用：上传图片、拿外链、管理图片</h3>
+
+      <h4>4.1 上传图片</h4>
+      <ol>
+        <li>点「<b>选择图片</b>」按钮，在弹出的文件窗口里按住 Ctrl（或 Shift）可以一次选中多张。</li>
+        <li>页面顶部会显示当前规则：<b>单图 ≤ 20 MB · 单批最多 10 张</b>（管理员可在后台修改这两个上限）。</li>
+        <li>每个文件一行，各自有进度条，一张传完自动传下一张；传完显示「完成」。失败会直接标注原因，例如「超过单图 20 MB 上限」；如果图片在 OneDrive 等云盘的「按需下载」目录里（本地只是占位图标），会提示先同步回本地。</li>
+      </ol>
+      <p>上传完成后，新图片会自动出现在下方「<b>我的图片</b>」列表里。</p>
+
+      <h4>4.2 获取外链（重点！）</h4>
+      <p>「我的图片」里每张图都是一张卡片：</p>
+      <table>
+        <tr><th>卡片元素</th><th>说明</th></tr>
+        <tr><td>缩略图</td><td>点它可放大预览</td></tr>
+        <tr><td>文件名 / 大小 · 尺寸</td><td>如 <code>64.7 KB · 300×200</code></td></tr>
+        <tr><td><b>BBCode</b> 按钮</td><td>点一下复制 BBCode 链接（论坛常用），按钮短暂变成「已复制」</td></tr>
+        <tr><td><b>Markdown</b> 按钮</td><td>点一下复制 Markdown 链接（博客、笔记常用）</td></tr>
+      </table>
+<pre><code>Markdown:  ![文件名](http://你的域名/i/xxxx.png)
+BBCode:    [img]http://你的域名/i/xxxx.png[/img]</code></pre>
+      <p><b>想直接要图片网址（URL）？</b>点缩略图放大预览，点「<b>打开原图</b>」会在新标签页打开图片本体，浏览器地址栏里就是纯图片 URL，直接复制即可。</p>
+      <blockquote><p>💡 小知识：每张图片的外链地址形如 <code>/i/一串字母数字.png</code>，这串字符由图片内容计算得出。<b>就算你把文件名改了、重新上传同一张图，内容相同就共享同一个地址，不会重复占空间。</b></p></blockquote>
+
+      <h4>4.3 预览与删除</h4>
+      <ul>
+        <li><b>预览</b>：点卡片上的缩略图，弹出大图浮层，显示原图、文件名、大小、尺寸；可点「打开原图」在新标签页查看，点「关闭」退出。</li>
+        <li><b>删除</b>：点卡片上的「<b>删除</b>」，会弹确认框「确定删除……删除后不可恢复」，确认后图片被移除。⚠️ 删除是真正的删除（按内容哈希去重存储，只有当同一内容没有其他引用时文件才真正从硬盘移除），<b>且没有回收站</b>，删前想清楚。</li>
+      </ul>
+
+      <h4>4.4 图片多了以后</h4>
+      <ul>
+        <li>列表自动<b>分页</b>，底部「上一页 / 下一页」翻页，显示当前页码。</li>
+        <li><b>管理员</b>在列表上方多一个「<b>我的 / 全部</b>」切换：「我的」看自己传的，「全部」能浏览全站所有人传的图（也能管理/删除）。</li>
+      </ul>
+
+      <h3 id="zh-admin">5. 管理员后台</h3>
+      <p>用管理员账号登录后，右上角导航会多出「<b>后台</b>」入口，点进去有两块功能。</p>
+
+      <h4>5.1 站点设置</h4>
+      <table>
+        <tr><th>设置项</th><th>默认值</th><th>作用</th></tr>
+        <tr><td>站点名称</td><td><code>pixsy</code></td><td>显示在页面左上角，随你喜欢改</td></tr>
+        <tr><td>允许新用户注册</td><td>开</td><td>关掉后注册页不可用，只有老账号能登录（个人自用建议关）</td></tr>
+        <tr><td>允许上传图片</td><td>开</td><td>全站上传总开关，紧急情况可一键停上传</td></tr>
+        <tr><td>单图大小上限（MB）</td><td>20</td><td>单个文件最大多大（1~1024）</td></tr>
+        <tr><td>单批上传数量上限</td><td>10</td><td>一次最多同时选几张（1~50）</td></tr>
+      </table>
+      <p>改完点「<b>保存设置</b>」，<b>立即生效，不用重启程序</b>。</p>
+
+      <h4>5.2 站点行为小抄</h4>
+      <ul>
+        <li>服务器重启后，以上设置依然保留（存在数据库里）。</li>
+        <li>登录接口有防暴力破解限速：密码连续输错太快会被暂时拒绝，稍等即可。</li>
+      </ul>
+
+      <h3 id="zh-migrate">6. 从 Lsky Pro（兰空图床）迁移旧图</h3>
+      <p>如果你原来用兰空图床（Lsky Pro），换到 pixsy 后不用一张张重传，管理员后台就带迁移工具：</p>
+      <ol>
+        <li>进入 <b>后台 → 从 Lsky Pro 迁移图片</b>。</li>
+        <li>填三项：<b>Lsky 地址</b>（如 <code>https://img.example.com</code>）、<b>Lsky 登录邮箱</b>、<b>Lsky 密码</b>。</li>
+        <li>点「<b>开始迁移</b>」。</li>
+      </ol>
+      <p>之后会发生什么：</p>
+      <ul>
+        <li>迁移在<b>服务器后台</b>进行，<b>关掉浏览器页面也不影响进度</b>；回到后台页可以看到进度条和「已完成 x / y」实时状态。</li>
+        <li>图片会导入到<b>当前这个管理员账号</b>名下。</li>
+        <li>pixsy 会自动记录旧站路径别名：<b>老文章里的 <code>/i/…</code> 链接换成 pixsy 域名后照常能打开</b>，不用逐篇改文章。</li>
+        <li>个别图片失败不会中断整体迁移，结束后可展开「失败明细」查看原因。</li>
+        <li>迁移完成后可下载「<b>映射 CSV</b>」（旧链接 → 新链接对照表），需要批量替换文章链接时用它配合文本替换工具即可。</li>
+        <li>迁移过程中随时可以点「<b>取消迁移</b>」停下（已传好的不受影响）。</li>
+      </ul>
+      <blockquote><p>迁移的前提：pixsy 所在服务器能访问到旧 Lsky 站点；旧站账号里有对应的图片。不想用网页界面，也可以用仓库自带的命令行脚本 <code>scripts/migrate-lsky.mjs</code> 达到同样效果。</p></blockquote>
+
+      <h3 id="zh-backup">7. 数据备份与升级</h3>
+      <h4>备份 = 复制一个文件夹</h4>
+      <p>pixsy 的全部数据都在<b>数据目录</b>（默认是程序旁边的 <code>data\</code> 文件夹，Linux 默认 <code>/opt/pixsy/data</code>）：</p>
+<pre><code>data/
+├── pixsy.db      # 数据库（账号、图片记录、站点设置）
+├── jwt.secret    # 登录凭证密钥
+├── files/        # 图片原图
+└── thumbs/       # 缩略图</code></pre>
+      <p><b>定期把这个文件夹整个复制走（或压缩）就是完整备份</b>，恢复时放回原处即可。</p>
+      <h4>升级</h4>
+      <ol>
+        <li>备份 <code>data</code> 目录（求稳的话）。</li>
+        <li>用新版本的 exe / 二进制 / 镜像<b>替换旧程序文件</b>（数据目录别动、别删）。</li>
+        <li>重新启动。旧数据、账号、图片全部保留。</li>
+      </ol>
+
+      <h3 id="zh-faq">8. 常见问题 FAQ</h3>
+      <p><b>Q：打开页面提示「连接被拒绝」？</b><br>A：程序没在运行。Windows 双击 exe 看黑窗口是否一闪而过（可能端口被占用，按下一问改端口）；Linux 用 <code>systemctl status pixsy</code> 看服务状态。</p>
+      <p><b>Q：8080 端口被别的程序占了？</b><br>A：在 exe 旁边放一个 <code>pixsy.json</code>，写 <code>{ "port": 9000 }</code>，重启程序后改用 9000 端口。</p>
+      <p><b>Q：上传按钮点不动 / 提示不允许上传？</b><br>A：管理员后台把「允许上传图片」关了，或「单图大小上限」设得太小。</p>
+      <p><b>Q：忘记管理员密码怎么办？</b><br>A：程序没有「找回密码」功能（数据都在你手里）。如果还没关注册，重新注册一个账号，再请懂数据库的人帮你把新账号提为管理员；或者干脆用备份的 <code>data</code> 目录回滚。</p>
+      <p><b>Q：图片外链在别的网站显示不出来？</b><br>A：按顺序检查——① 外链是不是复制的图片地址（<code>/i/…</code> 开头）；② 你的 pixsy 是否只有你自己能访问（局域网/本机部署），别人访问不到你的电脑；③ 是否设置了 HTTPS 混合内容问题（你的网站是 https，而图片链接是 http，浏览器会拦截）。</p>
+      <p><b>Q：想让图片走 CDN / 独立域名？</b><br>A：启动时设置 <code>PIXSY_BASE_URL</code>（或配置文件里的 <code>base_url</code>）为你的 CDN 域名，生成的外链会自动带上这个前缀。</p>
+      <p><b>Q：Windows 双击运行后黑窗口是什么？</b><br>A：那就是程序本体。关掉窗口服务就停了。想让它后台常驻，用第 2 节的任务计划方法，或直接用 Docker。</p>
+
+      <h3 id="zh-config">附录：配置一览</h3>
+      <p>优先级：<b>命令行参数 &gt; <code>PIXSY_*</code> 环境变量 &gt; <code>pixsy.json</code> 配置文件 &gt; 默认值</b>。个人用户只需要关心这几项：</p>
+      <table>
+        <tr><th>想改什么</th><th>怎么改</th></tr>
+        <tr><td>端口</td><td>配置文件 <code>"port": 9000</code>，或参数 <code>--addr :9000</code>，或环境变量 <code>PIXSY_ADDR</code></td></tr>
+        <tr><td>图片存哪里</td><td>配置文件 <code>"data": "D:/picdata"</code>，或参数 <code>--data</code>（默认程序旁边 <code>./data</code>）</td></tr>
+        <tr><td>CDN / 外链前缀</td><td>配置文件 <code>"base_url": "https://img.xxx.com"</code>，或环境变量 <code>PIXSY_BASE_URL</code></td></tr>
+        <tr><td>关闭自动开浏览器</td><td>配置文件 <code>"open_browser": false</code>，或参数 <code>--open-browser=false</code></td></tr>
+        <tr><td>站点设置（站名/开关/上限）</td><td>优先在<b>网页后台</b>改，即时生效；配置文件 <code>settings</code> 段写的项会在<b>每次启动时强制覆盖</b>网页设置，没写的项不受影响</td></tr>
+      </table>
+      <p>完整示例 <code>pixsy.json</code>：</p>
+<pre><code>{
+  "port": 8080,
+  "data": "./data",
+  "base_url": "",
+  "jwt_secret": "",
+  "static_dir": "",
+  "open_browser": true,
+  "settings": {
+    "site_name": "pixsy",
+    "allow_register": true,
+    "allow_upload": true,
+    "max_upload_mb": 20,
+    "max_batch": 10
+  }
+}</code></pre>
+      <blockquote><p>⚠️ <code>jwt_secret</code> 留空会自动生成并保存在数据目录，一般不用管；多实例/容器部署且想固定登录状态时才显式指定。<code>settings</code> 里的值填非法（比如上限超范围）会导致程序拒绝启动并提示原因——按提示改回来即可。</p></blockquote>
+
+      <p class="gfoot">本页内容同步自 <a href="用户指南.md">docs/用户指南.md</a>，可下载离线阅读或随仓库分发。</p>
+    </div>
+
+    <!-- ---------- English ---------- -->
+    <div class="gpanel guide" id="guide-en" role="tabpanel" aria-labelledby="gt-en" aria-hidden="true">
+      <div class="guide-toc">
+        <h3>Contents</h3>
+        <ol>
+          <li><a href="#en-what">What is pixsy?</a></li>
+          <li><a href="#en-install">Installation (pick one of three)</a></li>
+          <li><a href="#en-first">First use: register and log in</a></li>
+          <li><a href="#en-daily">Everyday use: upload, links, manage</a></li>
+          <li><a href="#en-admin">Admin panel</a></li>
+          <li><a href="#en-migrate">Migrating from Lsky Pro</a></li>
+          <li><a href="#en-backup">Backup and upgrade</a></li>
+          <li><a href="#en-faq">FAQ</a></li>
+          <li><a href="#en-config">Appendix: configuration</a></li>
+        </ol>
+      </div>
+
+      <h3 id="en-what">1. What is pixsy?</h3>
+      <p><b>pixsy is an "image host": you store your pictures on it, it gives you back a web link, and you paste that link anywhere — a blog, a forum, a newsletter editor — and the image shows up.</b></p>
+      <p>The difference from free public image hosts: pixsy runs on <b>your own computer or server</b>, and your pictures stay on <b>your own disk</b> —</p>
+      <ul>
+        <li>No worries about a third-party host shutting down, throttling you, or stamping ads/watermarks on your images;</li>
+        <li>One file (a ~12MB exe, or a ~25MB Docker image) <b>is</b> the whole site — no database to install;</li>
+        <li>Supported formats: <b>JPEG / PNG / GIF (animated) / WebP / ICO</b>;</li>
+        <li>Thumbnails are generated automatically on upload, so the library stays fast even with thousands of images;</li>
+        <li>Identical images are deduplicated by content, so nothing is ever stored twice.</li>
+      </ul>
+
+      <h3 id="en-install">2. Installation (pick one of three)</h3>
+      <blockquote><p>All three options produce exactly the same site. When you open <code>http://localhost:8080</code> and see the pixsy home page, you're done.</p></blockquote>
+
+      <h4>Option A: Windows PC (easiest — just double-click)</h4>
+      <p>Best for: personal use, LAN use, or just trying it out.</p>
+      <ol>
+        <li><b>Get the program</b>: download <code>pixsy_windows_amd64.zip</code> from the <a href="https://gitee.com/java-and-net/pixsy/releases" target="_blank" rel="noopener">Releases page</a> (or run <code>make package</code> in the repo to build it yourself).</li>
+        <li><b>Unzip</b> it into a <b>permanent</b> folder, e.g. <code>D:\pixsy\</code>. Inside there's a single file: <code>pixsy-windows-amd64.exe</code>.</li>
+        <li><b>Double-click to run.</b> The first launch triggers a Windows Firewall prompt — only using it on this computer → click Cancel; want other devices (e.g. your phone) on the LAN to access it → check "Private networks" and click Allow access.</li>
+        <li>The program <b>automatically opens your browser</b> to the pixsy home page. If nothing pops up, visit <code>http://localhost:8080</code> yourself.</li>
+      </ol>
+      <p><b>Want to change the port?</b> Create a text file named <code>pixsy.json</code> next to the exe with just one line:</p>
+<pre><code>{ "port": 9000 }</code></pre>
+      <p>Double-click the exe again and it now uses port 9000 (full reference in the <a href="#en-config">configuration appendix</a>).</p>
+      <p><b>Want it to start on boot?</b> Register it once with Windows Task Scheduler. In an administrator PowerShell (adjust the path to yours):</p>
+<pre><code>schtasks /Create /TN pixsy /SC ONSTART /RU SYSTEM /TR "D:\pixsy\pixsy-windows-amd64.exe --addr :8080 --data D:\pixsy\data"</code></pre>
+      <blockquote><p>Note: the program runs as a foreground console window. Closing the window <b>stops the service</b> — that's not a crash; just relaunch it.</p></blockquote>
+
+      <h4>Option B: A server (Linux) — recommended for real use</h4>
+      <p>Best for: a cloud VPS / NAS / Raspberry Pi that stays on 24/7 serving images for your blog.</p>
+      <ol>
+        <li><b>Upload and install</b> (run on the server):
+<pre><code># after uploading pixsy_linux_amd64.tar.gz to the server:
+tar -xzf pixsy_linux_amd64.tar.gz           # extracts the pixsy executable
+sudo useradd -r -s /usr/sbin/nologin pixsy  # dedicated low-privilege run account
+sudo mkdir -p /opt/pixsy/data
+sudo install -m 0755 pixsy /opt/pixsy/pixsy
+sudo chown -R pixsy:pixsy /opt/pixsy</code></pre>
+          <p>On ARM devices (some NAS / Raspberry Pi), use <code>pixsy_linux_arm64.tar.gz</code> instead.</p>
+        </li>
+        <li><b>Register it as a system service</b> (auto-start on boot, auto-restart on crash):
+<pre><code>sudo cp deploy/pixsy.service /etc/systemd/system/pixsy.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now pixsy
+sudo systemctl status pixsy   # you want to see active (running)</code></pre>
+        </li>
+        <li><b>Verify</b>: open <code>http://&lt;server-ip&gt;:8080</code> in a browser, or run <code>curl http://127.0.0.1:8080/api/v1/config</code> on the server. A JSON response means everything works.</li>
+      </ol>
+      <p>If you change the config (port, data directory, etc.) later, run <code>sudo systemctl daemon-reload</code> followed by <code>sudo systemctl restart pixsy</code>.</p>
+      <blockquote><p><b>Security reminder</b>: if your server has a firewall / cloud security group (Alibaba Cloud, Tencent Cloud, AWS, …), remember to open port 8080 there, or the outside world can't reach the site.</p></blockquote>
+
+      <h4>Option C: Docker (one-minute deploy if you know containers)</h4>
+      <p>An image is published on Docker Hub: <code>yjj6731/pixsy</code>.</p>
+<pre><code># Quickest: docker run
+docker run -d -p 8080:8080 -v ./data:/app/data --restart unless-stopped yjj6731/pixsy
+
+# Or use docker compose from this project's directory (builds the image locally)
+docker compose up -d --build</code></pre>
+      <p>Data (database + images) is persisted in the host's <code>./data</code> directory and survives image upgrades. Customize via environment variables:</p>
+<pre><code>environment:
+  - PIXSY_BASE_URL=https://img.example.com   # public URL prefix for image links (set when behind a CDN domain)
+  - PIXSY_JWT_SECRET=change-to-a-random-string # recommended to set explicitly in production</code></pre>
+
+      <h3 id="en-first">3. First use: register and log in</h3>
+      <ol>
+        <li>Open the pixsy home page (<code>http://localhost:8080</code> or your server's address).</li>
+        <li>Click <b>Register</b> in the top-right corner, fill in a <b>username</b>, <b>password</b>, and <b>confirm password</b>, then click Register.</li>
+        <li>On success you're logged in automatically and land on the upload page.</li>
+      </ol>
+      <blockquote><p>⭐ <b>Important</b>: <b>the first registered user automatically becomes the admin</b>. So on your own installation, register first — admin is yours. Everyone who registers afterwards is a regular user.</p></blockquote>
+      <p>You can <b>turn off open registration</b> any time in the admin panel (see <a href="#en-admin">Admin panel</a>). Once closed, only existing accounts can log in — for personal use, it's a good idea to close it right after you register, so strangers can't upload to your host.</p>
+
+      <h3 id="en-daily">4. Everyday use: upload, get links, manage images</h3>
+
+      <h4>4.1 Uploading images</h4>
+      <ol>
+        <li>Click the <b>Select images</b> button; hold Ctrl (or Shift) in the file picker to choose multiple files at once.</li>
+        <li>The page shows the current limits up top: <b>single image ≤ 20 MB · up to 10 per batch</b> (an admin can change both limits in the admin panel).</li>
+        <li>Each file gets its own row with its own progress bar; files are uploaded one by one and marked <b>Done</b> when finished. Failures state the reason directly, e.g. "exceeds the 20 MB per-image limit". If an image lives in a "files on demand" cloud folder (e.g. OneDrive with only a placeholder on disk), you'll be asked to sync the file back to local storage first.</li>
+      </ol>
+      <p>Once uploaded, new pictures appear immediately in the <b>My images</b> list below.</p>
+
+      <h4>4.2 Getting a link (the whole point!)</h4>
+      <p>Every picture in "My images" is a card:</p>
+      <table>
+        <tr><th>Card element</th><th>What it does</th></tr>
+        <tr><td>Thumbnail</td><td>Click to open the large preview</td></tr>
+        <tr><td>Filename / size · dimensions</td><td>e.g. <code>64.7 KB · 300×200</code></td></tr>
+        <tr><td><b>BBCode</b> button</td><td>Copies the BBCode link (used by many forums); the button briefly turns into "Copied"</td></tr>
+        <tr><td><b>Markdown</b> button</td><td>Copies the Markdown link (blogs, notes, docs)</td></tr>
+      </table>
+<pre><code>Markdown:  ![filename](http://your-domain/i/xxxx.png)
+BBCode:    [img]http://your-domain/i/xxxx.png[/img]</code></pre>
+      <p><b>Just want the plain image URL?</b> Click the thumbnail to open the large preview, then click <b>Open original</b> — the picture opens in a new tab and the browser's address bar holds the plain image URL, ready to copy.</p>
+      <blockquote><p>💡 Good to know: every link looks like <code>/i/a-string-of-characters.png</code>, where the string is computed from the image's content. <b>Rename the file or re-upload the same picture — identical content shares the same address and never wastes disk space.</b></p></blockquote>
+
+      <h4>4.3 Preview and delete</h4>
+      <ul>
+        <li><b>Preview</b>: click a card's thumbnail to open a lightbox with the full-size image, filename, size, and dimensions. Click "Open original" to view it in a new tab, or "Close" to exit.</li>
+        <li><b>Delete</b>: click <b>Delete</b> on the card. A confirmation appears — "Delete …? This cannot be undone." Deletion is real (thanks to content-hash deduplication, the file only leaves the disk when no other record references the same content), and <b>there is no recycle bin</b> — think before you confirm.</li>
+      </ul>
+
+      <h4>4.4 When your library grows</h4>
+      <ul>
+        <li>The list <b>paginates</b> automatically: Previous / Next buttons at the bottom, plus the current page number.</li>
+        <li><b>Admins</b> get an extra <b>Mine / All</b> switch above the list: "Mine" shows your own uploads, "All" browses every image on the site (which you can also manage/delete).</li>
+      </ul>
+
+      <h3 id="en-admin">5. Admin panel</h3>
+      <p>After logging in with the admin account, an <b>Admin panel</b> entry appears in the top-right navigation. Inside there are two sections.</p>
+
+      <h4>5.1 Site settings</h4>
+      <table>
+        <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+        <tr><td>Site name</td><td><code>pixsy</code></td><td>Shown in the top-left corner; call it whatever you like</td></tr>
+        <tr><td>Allow new registrations</td><td>On</td><td>When off, the register page is disabled and only existing accounts can log in (recommended for personal use)</td></tr>
+        <tr><td>Allow uploads</td><td>On</td><td>The site-wide upload master switch — a one-click emergency stop</td></tr>
+        <tr><td>Max image size (MB)</td><td>20</td><td>Largest single file allowed (1–1024)</td></tr>
+        <tr><td>Max batch size</td><td>10</td><td>Most files selectable in one go (1–50)</td></tr>
+      </table>
+      <p>Click <b>Save settings</b> and changes take effect <b>immediately — no restart needed</b>.</p>
+
+      <h4>5.2 Behavior worth knowing</h4>
+      <ul>
+        <li>All of the above settings survive restarts (they're stored in the database).</li>
+        <li>The login endpoint is rate-limited against brute force: too many wrong attempts too quickly will be temporarily rejected — just wait a moment.</li>
+      </ul>
+
+      <h3 id="en-migrate">6. Migrating from Lsky Pro</h3>
+      <p>Coming from Lsky Pro? No need to re-upload picture by picture — the admin panel has a built-in migration tool:</p>
+      <ol>
+        <li>Go to <b>Admin panel → Migrate images from Lsky Pro</b>.</li>
+        <li>Fill in three fields: <b>Lsky address</b> (e.g. <code>https://img.example.com</code>), <b>Lsky email</b>, <b>Lsky password</b>.</li>
+        <li>Click <b>Start migration</b>.</li>
+      </ol>
+      <p>What happens next:</p>
+      <ul>
+        <li>Migration runs <b>in the background on the server</b>; <b>closing the browser does not stop it</b>. Return to the admin page any time to see the progress bar and the live "completed x / y" counter.</li>
+        <li>Images are imported under <b>the currently logged-in admin account</b>.</li>
+        <li>pixsy automatically records path aliases for the old site: <b>old <code>/i/…</code> links keep working after you switch the domain</b> — no need to edit old articles one by one.</li>
+        <li>Individual failures never abort the whole migration; expand "Failure details" afterwards to see what went wrong.</li>
+        <li>Once finished, you can download the <b>mapping CSV</b> (old link → new link) and batch-replace links in your articles.</li>
+        <li>Click <b>Cancel migration</b> at any time to stop (whatever already transferred stays).</li>
+      </ul>
+      <blockquote><p>Requirements: the pixsy server must be able to reach the old Lsky site, and the Lsky account must own the images. Prefer a terminal? The bundled script <code>scripts/migrate-lsky.mjs</code> does the same thing from the command line.</p></blockquote>
+
+      <h3 id="en-backup">7. Backup and upgrade</h3>
+      <h4>Backing up = copying one folder</h4>
+      <p>Everything pixsy owns lives in the <b>data directory</b> (by default the <code>data\</code> folder next to the program; <code>/opt/pixsy/data</code> on Linux):</p>
+<pre><code>data/
+├── pixsy.db      # database (accounts, image records, site settings)
+├── jwt.secret    # login-token signing key
+├── files/        # original images
+└── thumbs/       # thumbnails</code></pre>
+      <p><b>Copy or zip this entire folder regularly and you have a full backup.</b> To restore, put it back in place.</p>
+      <h4>Upgrading</h4>
+      <ol>
+        <li>Back up the <code>data</code> directory (to be safe).</li>
+        <li>Replace the old program file (exe / binary / image) with the new version — <b>don't touch or delete the data directory</b>.</li>
+        <li>Start it again. Accounts, settings, and pictures all carry over.</li>
+      </ol>
+
+      <h3 id="en-faq">8. FAQ</h3>
+      <p><b>Q: The page says "connection refused".</b><br>A: The program isn't running. On Windows, double-click the exe and watch whether the console window flashes and disappears (port already taken? see next question). On Linux, check <code>systemctl status pixsy</code>.</p>
+      <p><b>Q: Port 8080 is already in use.</b><br>A: Put a <code>pixsy.json</code> next to the exe containing <code>{ "port": 9000 }</code>, restart, and the site moves to port 9000.</p>
+      <p><b>Q: The upload button does nothing / says uploads aren't allowed.</b><br>A: An admin turned off "Allow uploads" in the admin panel, or set the size limit too small.</p>
+      <p><b>Q: I forgot the admin password.</b><br>A: There's no password-recovery feature (all data is yours to manage). If registration is still open, register a fresh account and have someone comfortable with databases promote it to admin; otherwise restore from a backup of the <code>data</code> directory.</p>
+      <p><b>Q: Images don't show on the site where I pasted the links.</b><br>A: Check in order — ① the link is really the image address (starts with <code>/i/…</code>); ② your pixsy may only be reachable from your own machine/LAN, so visitors can't load it; ③ mixed-content blocking: your site is https but the image link is http, so the browser blocks it.</p>
+      <p><b>Q: Can images go through a CDN / custom domain?</b><br>A: Set <code>PIXSY_BASE_URL</code> at startup (or <code>base_url</code> in the config file) to your CDN domain; generated links will automatically carry that prefix.</p>
+      <p><b>Q: What is that black console window on Windows?</b><br>A: That's the program itself. Closing it stops the service. To run it as a background service, use the Task Scheduler method in section 2, or just use Docker.</p>
+
+      <h3 id="en-config">Appendix: configuration</h3>
+      <p>Priority: <b>command-line flags &gt; <code>PIXSY_*</code> environment variables &gt; <code>pixsy.json</code> config file &gt; defaults</b>. Most people only need these:</p>
+      <table>
+        <tr><th>What you want</th><th>How</th></tr>
+        <tr><td>Change the port</td><td><code>"port": 9000</code> in the config file, or <code>--addr :9000</code>, or <code>PIXSY_ADDR</code></td></tr>
+        <tr><td>Where images are stored</td><td><code>"data": "D:/picdata"</code> in the config file, or <code>--data</code> (default <code>./data</code> next to the program)</td></tr>
+        <tr><td>CDN / link prefix</td><td><code>"base_url": "https://img.xxx.com"</code> in the config file, or <code>PIXSY_BASE_URL</code></td></tr>
+        <tr><td>Disable auto-opening the browser</td><td><code>"open_browser": false</code> in the config file, or <code>--open-browser=false</code></td></tr>
+        <tr><td>Site settings (name, switches, limits)</td><td>Change them in the <b>web admin panel</b> first — instant effect. Anything written in the <code>settings</code> section of the config file <b>overrides the panel on every startup</b>; keys you leave out are untouched</td></tr>
+      </table>
+      <p>Full <code>pixsy.json</code> example:</p>
+<pre><code>{
+  "port": 8080,
+  "data": "./data",
+  "base_url": "",
+  "jwt_secret": "",
+  "static_dir": "",
+  "open_browser": true,
+  "settings": {
+    "site_name": "pixsy",
+    "allow_register": true,
+    "allow_upload": true,
+    "max_upload_mb": 20,
+    "max_batch": 10
+  }
+}</code></pre>
+      <blockquote><p>⚠️ Leave <code>jwt_secret</code> empty and one is generated automatically into the data directory — normally you never touch it; set it explicitly only when running multiple instances/containers and you want logins to persist. Invalid values in <code>settings</code> (e.g. a limit out of range) make the program refuse to start with a clear reason — fix it as instructed.</p></blockquote>
+
+      <p class="gfoot">This page mirrors <a href="user-guide.md">docs/user-guide.md</a> — download it for offline reading or ship it with the repo.</p>
+    </div>
+  </div>
+</section>
+
 <!-- ============ 页脚 ============ -->
 <footer>
   <div class="wrap">
@@ -386,6 +900,8 @@ go build -o pixsy ./cmd/pixsy
       <a href="https://github.com/easy-open-meta/pixsy" target="_blank" rel="noopener">GitHub</a>
       <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/design.md" target="_blank" rel="noopener">设计文档</a>
       <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/deploy-and-dev-guide.md" target="_blank" rel="noopener">部署指南</a>
+      <a href="用户指南.md">用户指南</a>
+      <a href="user-guide.md">User Guide</a>
       <a href="https://gitee.com/java-and-net/pixsy/releases" target="_blank" rel="noopener">Releases</a>
       <a href="https://hub.docker.com/r/yjj6731/pixsy" target="_blank" rel="noopener">Docker Hub</a>
     </div>
@@ -403,6 +919,27 @@ document.querySelectorAll('.tab').forEach(function (t) {
     t.setAttribute('aria-selected', 'true');
     document.getElementById(t.getAttribute('aria-controls')).setAttribute('aria-hidden', 'false');
   });
+});
+// 用户指南：中英文 Tab
+document.querySelectorAll('.gtab').forEach(function (t) {
+  t.addEventListener('click', function () {
+    document.querySelectorAll('.gtab').forEach(function (x) { x.setAttribute('aria-selected', 'false'); });
+    document.querySelectorAll('.gpanel').forEach(function (p) { p.setAttribute('aria-hidden', 'true'); });
+    t.setAttribute('aria-selected', 'true');
+    document.getElementById(t.getAttribute('aria-controls')).setAttribute('aria-hidden', 'false');
+  });
+});
+// 主题切换：记忆到 localStorage
+document.getElementById('themeToggle').addEventListener('click', function () {
+  var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (dark) {
+    document.documentElement.removeAttribute('data-theme');
+    this.setAttribute('aria-label', '切换深色模式');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    this.setAttribute('aria-label', '切换浅色模式');
+  }
+  try { localStorage.setItem('pixsy-theme', dark ? 'light' : 'dark'); } catch (e) {}
 });
 // 复制按钮
 document.querySelectorAll('.copy').forEach(function (b) {
