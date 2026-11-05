@@ -65,6 +65,8 @@ make all      # 全部分发产物
 make package  # 打包 Linux(amd64/arm64)+Windows(amd64) 安装包到 deploy/（含 systemd unit 与说明文件）
 ```
 
+安装包版本号依次取：`-version` 参数 → 最近的 git tag → 仓库根目录 `VERSION` 文件，取不到时用 `dev`。
+
 产物为 `CGO_ENABLED=0` 的静态单文件（SQLite 使用纯 Go 驱动，无 libc 依赖）：Linux 产物可直接在任意发行版上运行，Windows 产物见下文。未安装 make 时可手动执行等价命令：
 
 ```bash
