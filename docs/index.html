@@ -64,7 +64,7 @@ a:hover{text-decoration:underline}
 .dot{width:11px;height:11px;border-radius:50%}
 .demo-bar em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--code-dim);margin-left:8px}
 .demo-body{display:grid;grid-template-columns:1fr 1.25fr;background:var(--code-bg);border:1px solid #262A40;border-top:0;border-radius:0 0 var(--radius) var(--radius);overflow:hidden}
-.term,.resp{padding:20px 22px;font-family:var(--mono);font-size:12.8px;line-height:1.85;color:var(--code-ink);overflow-x:auto}
+.term,.resp{padding:20px 22px;font-family:var(--mono);font-size:12.8px;line-height:1.85;color:var(--code-ink);overflow-x:auto;white-space:pre-wrap;word-break:break-word}
 .term{border-right:1px solid #262A40}
 .resp{position:relative;padding-top:38px}
 .term .p{color:#8B93B8}
@@ -150,11 +150,11 @@ footer p{margin-top:6px}
       <a href="#deploy">部署</a>
       <a href="#ecosystem">生态</a>
       <a href="#api">API</a>
-      <a href="https://github.com/ck_yeun9/pixsy/blob/main/docs/design.md">设计文档</a>
+      <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/design.md">设计文档</a>
     </div>
-    <a class="nav-gh" href="https://github.com/ck_yeun9/pixsy" target="_blank" rel="noopener">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-      GitHub
+    <a class="nav-gh" href="https://gitee.com/java-and-net/pixsy" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="4.5" cy="3.5" r="1.8"/><circle cx="4.5" cy="12.5" r="1.8"/><circle cx="11.5" cy="5.5" r="1.8"/><path d="M4.5 5.3v5.4M11.5 7.3c0 2.4-2.4 2.7-4.3 3.1"/></svg>
+      Gitee
     </a>
   </div>
 </nav>
@@ -176,7 +176,7 @@ footer p{margin-top:6px}
     <p class="lead">Go + Vue 3 构建：前端经 go:embed 内嵌、SQLite 纯 Go 驱动（无 CGO）。最终交付物只有一个可执行文件——拷到服务器上就能跑，不装数据库、不依赖任何外部服务。</p>
     <div class="cta">
       <a class="btn btn-primary" href="#deploy">5 分钟部署</a>
-      <a class="btn btn-ghost" href="https://github.com/ck_yeun9/pixsy" target="_blank" rel="noopener">查看源码</a>
+      <a class="btn btn-ghost" href="https://gitee.com/java-and-net/pixsy" target="_blank" rel="noopener">查看源码</a>
     </div>
     <div class="shield" aria-label="技术栈">
       <span><i style="color:#00ADD8">●</i>Go 1.22+</span>
@@ -293,9 +293,10 @@ docker run -d -p 8080:8080 -v ./data:/app/data pixsy</pre>
     </div>
 
     <div class="panel" id="p-bin" role="tabpanel" aria-labelledby="t-bin" aria-hidden="true">
-      <button class="copy" data-copy="wget https://github.com/ck_yeun9/pixsy/releases/latest/download/pixsy-linux-amd64 && chmod +x pixsy-linux-amd64 && ./pixsy-linux-amd64">复制</button>
+      <button class="copy" data-copy="wget https://gitee.com/java-and-net/pixsy/releases/download/v1.0.0/pixsy-linux-amd64 && chmod +x pixsy-linux-amd64 && ./pixsy-linux-amd64">复制</button>
 <pre><span class="cm"># Linux / Windows 产物为 CGO_ENABLED=0 静态单文件（约 12MB）</span>
-wget https://github.com/ck_yeun9/pixsy/releases/latest/download/pixsy-linux-amd64
+<span class="cm"># 版本号以 Releases 页为准：gitee.com/java-and-net/pixsy/releases</span>
+wget https://gitee.com/java-and-net/pixsy/releases/download/v1.0.0/pixsy-linux-amd64
 chmod +x pixsy-linux-amd64
 ./pixsy-linux-amd64          <span class="cm"># 默认监听 :8080，数据在 ./data</span>
 
@@ -365,7 +366,7 @@ go build -o pixsy ./cmd/pixsy
       <div class="api-row"><span class="method m-get">GET</span><span class="api-path">/i/{hash}.{ext}</span><span class="api-desc">原图直出（支持 HTTP Range）</span></div>
       <div class="api-row"><span class="method m-get">GET</span><span class="api-path">/t/{hash}.jpg</span><span class="api-desc">缩略图直出</span></div>
     </div>
-    <p class="api-foot">完整接口清单见 <a href="https://github.com/ck_yeun9/pixsy#api">README · API</a>，或直接看 <a href="https://github.com/ck_yeun9/pixsy/blob/main/internal/api/api.go">api.go</a> 源码。</p>
+    <p class="api-foot">完整接口清单见 <a href="https://gitee.com/java-and-net/pixsy/blob/main/README.md#api">README · API</a>，或直接看 <a href="https://gitee.com/java-and-net/pixsy/blob/main/internal/api/api.go">api.go</a> 源码。</p>
   </div>
 </section>
 
@@ -373,10 +374,10 @@ go build -o pixsy ./cmd/pixsy
 <footer>
   <div class="wrap">
     <div class="links">
-      <a href="https://github.com/ck_yeun9/pixsy" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/ck_yeun9/pixsy/blob/main/docs/design.md" target="_blank" rel="noopener">设计文档</a>
-      <a href="https://github.com/ck_yeun9/pixsy/blob/main/docs/deploy-and-dev-guide.md" target="_blank" rel="noopener">部署指南</a>
-      <a href="https://github.com/ck_yeun9/pixsy/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://gitee.com/java-and-net/pixsy" target="_blank" rel="noopener">Gitee</a>
+      <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/design.md" target="_blank" rel="noopener">设计文档</a>
+      <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/deploy-and-dev-guide.md" target="_blank" rel="noopener">部署指南</a>
+      <a href="https://gitee.com/java-and-net/pixsy/releases" target="_blank" rel="noopener">Releases</a>
     </div>
     <p>pixsy · MIT License · 本页本身就是一个零依赖的单文件 HTML，与产品同一套哲学</p>
     <p>易开元(EOM) 用 ❤ 制作</p>
