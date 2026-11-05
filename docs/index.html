@@ -287,8 +287,12 @@ footer p{margin-top:6px}
     </div>
 
     <div class="panel" id="p-docker" role="tabpanel" aria-labelledby="t-docker" aria-hidden="false">
-      <button class="copy" data-copy="docker compose up -d --build">复制</button>
-<pre><span class="cm"># 推荐：docker compose（已含数据卷与重启策略）</span>
+      <button class="copy" data-copy="docker pull yjj6731/pixsy:latest && docker run -d -p 8080:8080 -v ./data:/app/data yjj6731/pixsy:latest">复制</button>
+<pre><span class="cm"># 最快：直接拉取 Docker Hub 镜像</span>
+docker pull yjj6731/pixsy:latest
+docker run -d -p 8080:8080 -v ./data:/app/data yjj6731/pixsy:latest
+
+<span class="cm"># 或 docker compose（已含数据卷与重启策略）</span>
 docker compose up -d --build
 
 <span class="cm"># 或手动构建运行</span>
@@ -383,6 +387,7 @@ go build -o pixsy ./cmd/pixsy
       <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/design.md" target="_blank" rel="noopener">设计文档</a>
       <a href="https://gitee.com/java-and-net/pixsy/blob/main/docs/deploy-and-dev-guide.md" target="_blank" rel="noopener">部署指南</a>
       <a href="https://gitee.com/java-and-net/pixsy/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://hub.docker.com/r/yjj6731/pixsy" target="_blank" rel="noopener">Docker Hub</a>
     </div>
     <p>pixsy · MIT License · 本页本身就是一个零依赖的单文件 HTML，与产品同一套哲学</p>
     <p>易开元(EOM) 用 ❤ 制作</p>
