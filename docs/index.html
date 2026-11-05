@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pixsy — 自托管图床，一个可执行文件就够了</title>
+<meta name="description" content="pixsy 是用 Go + Vue 3 编写的自托管图床：单二进制、零外部依赖、开箱即用。内容寻址去重、自动缩略图、Lsky Pro 无缝迁移。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234F46E5'/%3E%3Cpath d='M16 23V13M11.5 17.5 16 13l4.5 4.5' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M9 8h14' stroke='%23fff' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#F7F8FB; --card:#FFFFFF; --line:#E4E7F0;
+  --ink:#14172B; --muted:#5A607A; --faint:#9AA0B8;
+  --accent:#4F46E5; --accent-soft:#EEF0FE; --accent-line:#C9CDF8;
+  --code-bg:#12141F; --code-ink:#D6DAEA; --code-dim:#7C82A0;
+  --ok:#16A34A;
+  --radius:14px;
+  --sans:-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);line-height:1.65;font-size:16px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* ---------- 导航 ---------- */
+.nav{position:sticky;top:0;z-index:50;background:rgba(247,248,251,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav-in{display:flex;align-items:center;gap:28px;height:60px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:19px;color:var(--ink);letter-spacing:-.02em}
+.logo:hover{text-decoration:none}
+.logo svg{flex:none}
+.nav-links{display:flex;gap:22px;margin-left:auto}
+.nav-links a{color:var(--muted);font-size:14.5px}
+.nav-links a:hover{color:var(--ink);text-decoration:none}
+.nav-gh{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 13px;font-size:13.5px;color:var(--ink)}
+.nav-gh:hover{border-color:var(--accent-line);text-decoration:none}
+@media (max-width:640px){.nav-links{display:none}.nav-gh{margin-left:auto}}
+
+/* ---------- Hero ---------- */
+.hero{position:relative;overflow:hidden;padding:84px 0 64px;text-align:center}
+.hashbg{position:absolute;inset:0;pointer-events:none;user-select:none;font-family:var(--mono);font-size:12px;color:var(--ink);opacity:.05;line-height:2.1;letter-spacing:.04em;white-space:nowrap}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 14px;font-size:13px;color:var(--muted)}
+.hero-badge b{color:var(--accent);font-weight:600}
+.hero h1{font-size:clamp(30px,5.4vw,52px);font-weight:800;letter-spacing:-.02em;line-height:1.25;margin:22px auto 0;max-width:720px}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero p.lead{max-width:640px;margin:18px auto 0;color:var(--muted);font-size:17px}
+.cta{display:flex;gap:14px;justify-content:center;margin-top:32px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:11px 24px;font-size:15.5px;font-weight:600;cursor:pointer}
+.btn:hover{text-decoration:none}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#4338CA}
+.btn-ghost{background:var(--card);border:1px solid var(--line);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--accent-line)}
+.shield{display:flex;gap:8px;justify-content:center;margin-top:30px;flex-wrap:wrap}
+.shield span{font-family:var(--mono);font-size:11.5px;padding:4px 11px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--muted)}
+.shield span i{font-style:normal;margin-right:6px}
+
+/* ---------- 演示卡 ---------- */
+.demo{position:relative;max-width:880px;margin:52px auto 0;text-align:left}
+.demo-bar{display:flex;align-items:center;gap:7px;background:#1B1E2E;border-radius:var(--radius) var(--radius) 0 0;padding:12px 16px;border:1px solid #262A40;border-bottom:0}
+.dot{width:11px;height:11px;border-radius:50%}
+.demo-bar em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--code-dim);margin-left:8px}
+.demo-body{display:grid;grid-template-columns:1fr 1.25fr;background:var(--code-bg);border:1px solid #262A40;border-top:0;border-radius:0 0 var(--radius) var(--radius);overflow:hidden}
+.term,.resp{padding:20px 22px;font-family:var(--mono);font-size:12.8px;line-height:1.85;color:var(--code-ink);overflow-x:auto}
+.term{border-right:1px solid #262A40}
+.resp{position:relative;padding-top:38px}
+.term .p{color:#8B93B8}
+.term .c{color:#6EC7A0}
+.term .s{color:#E8B96D}
+.resp-tag{position:absolute;top:14px;right:16px;font-size:10.5px;color:var(--code-dim)}
+.k{color:#8B93B8}.v{color:#7DD3B0}.v2{color:#E8B96D}
+@media (max-width:760px){.demo-body{grid-template-columns:1fr}.term{border-right:0;border-bottom:1px solid #262A40}}
+
+/* ---------- 通用节 ---------- */
+section{padding:72px 0}
+.sec-head{text-align:center;max-width:620px;margin:0 auto 44px}
+.sec-head h2{font-size:clamp(24px,3.4vw,32px);font-weight:800;letter-spacing:-.02em}
+.sec-head p{color:var(--muted);margin-top:12px}
+
+/* ---------- 功能网格 ---------- */
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+@media (max-width:960px){.grid{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+.feat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px 20px}
+.feat svg{display:block;margin-bottom:14px}
+.feat h3{font-size:15.5px;font-weight:700;margin-bottom:6px}
+.feat p{font-size:13.5px;color:var(--muted);line-height:1.7}
+
+/* ---------- 部署 ---------- */
+.deploy{background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:6px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+.tab{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 18px;font-size:13.5px;font-family:var(--sans);color:var(--muted);cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.panel{display:none;max-width:760px;margin:0 auto;background:var(--code-bg);border-radius:var(--radius);padding:24px 26px;position:relative}
+.panel[aria-hidden="false"]{display:block}
+.panel pre{font-family:var(--mono);font-size:13px;line-height:1.9;color:var(--code-ink);overflow-x:auto;white-space:pre}
+.panel .cm{color:#6B7194}
+.copy{position:absolute;top:14px;right:14px;border:1px solid #3A3F5C;background:transparent;color:var(--code-dim);border-radius:6px;font-size:11.5px;padding:4px 10px;cursor:pointer;font-family:var(--sans)}
+.copy:hover{color:var(--code-ink);border-color:#565C80}
+.copy.ok{color:#7DD3B0;border-color:#3E6B58}
+.panel-note{text-align:center;color:var(--faint);font-size:13px;margin-top:18px}
+
+/* ---------- 生态 ---------- */
+.eco{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:880px;margin:0 auto}
+@media (max-width:760px){.eco{grid-template-columns:1fr}}
+.eco-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px 24px}
+.eco-card .tag{display:inline-block;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:5px;padding:2px 9px;margin-bottom:14px}
+.eco-card h3{font-size:17px;font-weight:700;margin-bottom:8px}
+.eco-card p{font-size:14px;color:var(--muted)}
+.eco-card ul{list-style:none;margin-top:14px}
+.eco-card li{font-size:13.5px;color:var(--muted);padding:5px 0 5px 22px;position:relative}
+.eco-card li::before{content:"";position:absolute;left:2px;top:11px;width:12px;height:12px;border-radius:50%;background:var(--accent-soft);border:1.5px solid var(--accent-line)}
+.eco-card li::after{content:"";position:absolute;left:5px;top:13px;width:5px;height:3px;border-left:1.5px solid var(--accent);border-bottom:1.5px solid var(--accent);transform:rotate(-45deg)}
+
+/* ---------- API ---------- */
+.api{max-width:880px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.api-row{display:grid;grid-template-columns:92px 1fr auto;gap:14px;align-items:center;padding:13px 22px;border-bottom:1px solid var(--line);font-size:13.5px}
+.api-row:last-child{border-bottom:0}
+.api-row:hover{background:#FAFBFE}
+.method{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 0;text-align:center;border-radius:5px;width:64px}
+.m-get{color:#0B72D9;background:#E8F2FD}
+.m-post{color:#0B8A4D;background:#E7F6EE}
+.m-del{color:#C2374A;background:#FCEBEE}
+.api-path{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+.api-desc{color:var(--muted);text-align:right;font-size:12.5px}
+@media (max-width:640px){.api-row{grid-template-columns:64px 1fr}.api-desc{display:none}}
+.api-foot{text-align:center;color:var(--muted);font-size:13.5px;margin-top:20px}
+
+/* ---------- 页脚 ---------- */
+footer{border-top:1px solid var(--line);padding:36px 0 44px;text-align:center;color:var(--faint);font-size:13px}
+footer .links{display:flex;gap:22px;justify-content:center;margin-bottom:14px;flex-wrap:wrap}
+footer .links a{color:var(--muted)}
+footer .links a:hover{color:var(--ink)}
+footer p{margin-top:6px}
+</style>
+</head>
+<body>
+
+<!-- ============ 导航 ============ -->
+<nav class="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="#">
+      <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#4F46E5"/><path d="M16 23V13M11.5 17.5 16 13l4.5 4.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9 8h14" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+      pixsy
+    </a>
+    <div class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#deploy">部署</a>
+      <a href="#ecosystem">生态</a>
+      <a href="#api">API</a>
+      <a href="https://github.com/ck_yeun9/pixsy/blob/main/docs/design.md">设计文档</a>
+    </div>
+    <a class="nav-gh" href="https://github.com/ck_yeun9/pixsy" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<header class="hero">
+  <div class="hashbg" aria-hidden="true">
+    <div style="position:absolute;top:6%;left:-2%">i/8f3a91c2d4e5b6a7f0c1d2e3b4a59687.png · t/8f3a91c2d4e5.jpg · i/0c1d2e3f4a5b6c7d.png</div>
+    <div style="position:absolute;top:38%;left:18%">i/1a2b3c4d5e6f70819a2b3c4d5e6f7081.webp · sha256:1a2b…7081 · dedup ✓</div>
+    <div style="position:absolute;top:72%;left:-4%">i/9f8e7d6c5b4a39281f0e1d2c3b4a5968.gif · i/5b6a7c8d9e0f1a2b3c4d5e6f7a8b9c0d.jpg · t/9f8e7d6c.jpg</div>
+    <div style="position:absolute;top:24%;right:-6%">sha256:3d4e5f6a7b8c…dedup ✓ · i/3d4e5f6a7b8c9d0e.png</div>
+    <div style="position:absolute;top:58%;right:2%">i/2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f.png · Lsky /i/2023/11/old-path.png → alias ✓</div>
+    <div style="position:absolute;top:88%;left:30%">t/4e5f6a7b8c9d.jpg · 350px · jpeg · i/6a7b8c9d0e1f.png</div>
+  </div>
+
+  <div class="wrap" style="position:relative">
+    <span class="hero-badge"><b>v1.0</b>· 已在自家博客稳定运行 · MIT License</span>
+    <h1>自托管图床<br>一个可执行文件，<em>就够了</em></h1>
+    <p class="lead">Go + Vue 3 构建：前端经 go:embed 内嵌、SQLite 纯 Go 驱动（无 CGO）。最终交付物只有一个可执行文件——拷到服务器上就能跑，不装数据库、不依赖任何外部服务。</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#deploy">5 分钟部署</a>
+      <a class="btn btn-ghost" href="https://github.com/ck_yeun9/pixsy" target="_blank" rel="noopener">查看源码</a>
+    </div>
+    <div class="shield" aria-label="技术栈">
+      <span><i style="color:#00ADD8">●</i>Go 1.22+</span>
+      <span><i style="color:#4FC08D">●</i>Vue 3</span>
+      <span><i style="color:#003B57">●</i>SQLite 内嵌</span>
+      <span><i style="color:#4F46E5">●</i>Docker 镜像约 25MB</span>
+    </div>
+
+    <!-- 真实 API 演示：上传一张图，返回四种外链 -->
+    <div class="demo">
+      <div class="demo-bar">
+        <span class="dot" style="background:#FF5F57"></span><span class="dot" style="background:#FEBC2E"></span><span class="dot" style="background:#28C840"></span>
+        <em>POST /api/v1/images — 一次上传，四种外链</em>
+      </div>
+      <div class="demo-body">
+        <div class="term">
+<span class="p">$</span> curl -X POST https://img.example.com/api/v1/images \
+&nbsp;&nbsp;&nbsp;&nbsp;-H <span class="s">"Authorization: Bearer $TOKEN"</span> \
+&nbsp;&nbsp;&nbsp;&nbsp;-F <span class="s">"file=@cat.png"</span>
+<span class="c">✓ 200 OK · 47 ms · sha256 1a2b…7081</span>
+<span class="p">$</span> <span class="k"># 相同内容再传一次 →</span>
+<span class="c">✓ 200 OK · 直接返回已有记录，磁盘不多占一字节</span>
+        </div>
+        <div class="resp">
+          <span class="resp-tag">{"data":{ … }}</span>
+{
+  <span class="k">"url"</span>:      <span class="v">"https://img.example.com/i/1a2b…7081.png"</span>,
+  <span class="k">"markdown"</span>: <span class="v2">"![cat.png](…/i/1a2b…7081.png)"</span>,
+  <span class="k">"html"</span>:     <span class="v2">"&lt;img src=&quot;…/i/1a2b…7081.png&quot;&gt;"</span>,
+  <span class="k">"bbcode"</span>:   <span class="v2">"[img]…/i/1a2b…7081.png[/img]"</span>,
+  <span class="k">"thumb_url"</span>:<span class="v">"…/t/1a2b…7081.jpg"</span>,
+  <span class="k">"width"</span>: 1280, <span class="k">"height"</span>: 853
+}
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 功能 ============ -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>为「自己管图」设计的每一步</h2>
+      <p>从落盘到外链，每个决定都指向同一个目标：少依赖、少操心、搬得走。</p>
+    </div>
+    <div class="grid">
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="18" height="12" rx="2"/><path d="M7 9V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"/><path d="M9 15h6"/></svg>
+        <h3>单二进制部署</h3>
+        <p>前端经 go:embed 内嵌进二进制，一个文件就是整站。拷贝、运行、完事。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        <h3>零外部依赖</h3>
+        <p>SQLite 用纯 Go 驱动（无 CGO），存储就是本地磁盘。交叉编译任意平台无障碍。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><path d="M4 12v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
+        <h3>内容寻址去重</h3>
+        <p>按 SHA-256 哈希落盘，同一张图传一百次只存一份；删到没人引用才真正删除。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg>
+        <h3>自动缩略图</h3>
+        <p>上传即生成 350px JPEG 缩略图，列表页刷得飞快，原图按需加载。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <h3>旧链接无缝衔接</h3>
+        <p>从 Lsky Pro 迁移自动记录路径别名，换域名后历史文章里的 /i/… 链接照常可用。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <h3>四种外链一键复制</h3>
+        <p>URL / Markdown / HTML / BBCode，写博客、发论坛、贴聊天，各取所需。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+        <h3>多用户与权限</h3>
+        <p>JWT 认证、登录接口限速防爆破；首个注册用户自动成为管理员。</p>
+      </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <h3>在线管理后台</h3>
+        <p>站点名称、注册/上传开关、单图与批量上限，改完即时生效，无需重启。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 部署 ============ -->
+<section id="deploy" class="deploy">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>5 分钟部署</h2>
+      <p>三条路都能走：容器、单文件、源码构建。数据就是 data/ 一个目录，备份它等于备份全站。</p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="部署方式">
+      <button class="tab" role="tab" aria-selected="true" aria-controls="p-docker" id="t-docker">Docker</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-bin" id="t-bin">单二进制</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="p-src" id="t-src">源码构建</button>
+    </div>
+
+    <div class="panel" id="p-docker" role="tabpanel" aria-labelledby="t-docker" aria-hidden="false">
+      <button class="copy" data-copy="docker compose up -d --build">复制</button>
+<pre><span class="cm"># 推荐：docker compose（已含数据卷与重启策略）</span>
+docker compose up -d --build
+
+<span class="cm"># 或手动构建运行</span>
+docker build -t pixsy .
+docker run -d -p 8080:8080 -v ./data:/app/data pixsy</pre>
+    </div>
+
+    <div class="panel" id="p-bin" role="tabpanel" aria-labelledby="t-bin" aria-hidden="true">
+      <button class="copy" data-copy="wget https://github.com/ck_yeun9/pixsy/releases/latest/download/pixsy-linux-amd64 && chmod +x pixsy-linux-amd64 && ./pixsy-linux-amd64">复制</button>
+<pre><span class="cm"># Linux / Windows 产物为 CGO_ENABLED=0 静态单文件（约 12MB）</span>
+wget https://github.com/ck_yeun9/pixsy/releases/latest/download/pixsy-linux-amd64
+chmod +x pixsy-linux-amd64
+./pixsy-linux-amd64          <span class="cm"># 默认监听 :8080，数据在 ./data</span>
+
+<span class="cm"># systemd 常驻：unit 文件见 deploy/pixsy.service</span></pre>
+    </div>
+
+    <div class="panel" id="p-src" role="tabpanel" aria-labelledby="t-src" aria-hidden="true">
+      <button class="copy" data-copy="npm --prefix web install && npm --prefix web run build && go build -o pixsy ./cmd/pixsy && ./pixsy">复制</button>
+<pre><span class="cm"># 1. 构建前端（输出 web/dist，供 go:embed 内嵌）</span>
+npm --prefix web install
+npm --prefix web run build
+
+<span class="cm"># 2. 编译后端并运行</span>
+go build -o pixsy ./cmd/pixsy
+./pixsy</pre>
+    </div>
+
+    <p class="panel-note">打开 <b>http://localhost:8080</b> —— 首个注册的用户自动成为管理员。</p>
+  </div>
+</section>
+
+<!-- ============ 生态 ============ -->
+<section id="ecosystem">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>生态与迁移</h2>
+      <p>从旧图床搬家，或者把博客的上传接过来，都是一条命令的事。</p>
+    </div>
+    <div class="eco">
+      <div class="eco-card">
+        <span class="tag">emlog 插件</span>
+        <h3>博客上传直接进图床</h3>
+        <p>emlog 后台装上插件，资源上传整体接管到 pixsy，文章里写的就是图床外链。</p>
+        <ul>
+          <li>上传接管：媒体库 / Markdown 编辑器统一生效</li>
+          <li>图库导入：把 pixsy 已有图片批量登记进 emlog 资源库</li>
+          <li>删除联动：删博客资源时同步删除图床图片</li>
+          <li>token 自动续期，含钩子排位自检</li>
+        </ul>
+      </div>
+      <div class="eco-card">
+        <span class="tag">Lsky Pro 迁移</span>
+        <h3>换图床，不断链</h3>
+        <p>管理后台填入 Lsky Pro 地址与账号，可视化管理整个迁移过程。</p>
+        <ul>
+          <li>进度实时可见，随时取消</li>
+          <li>旧路径别名自动记录，历史文章外链照常可用</li>
+          <li>迁移完成后可下载「旧 URL → 新 URL」映射 CSV</li>
+          <li>同哈希幂等，重复执行不产生重复文件</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ API ============ -->
+<section id="api" class="deploy">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>干净的 API</h2>
+      <p>统一 JSON 包络：成功 {"data": …}，失败 {"error": {code, message}}；鉴权走 Bearer token。</p>
+    </div>
+    <div class="api">
+      <div class="api-row"><span class="method m-post">POST</span><span class="api-path">/api/v1/images</span><span class="api-desc">上传图片（multipart 字段 file，可批量）</span></div>
+      <div class="api-row"><span class="method m-get">GET</span><span class="api-path">/api/v1/images</span><span class="api-desc">图片列表，分页；管理员可 scope=all</span></div>
+      <div class="api-row"><span class="method m-del">DELETE</span><span class="api-path">/api/v1/images/{id}</span><span class="api-desc">删除图片</span></div>
+      <div class="api-row"><span class="method m-get">GET</span><span class="api-path">/i/{hash}.{ext}</span><span class="api-desc">原图直出（支持 HTTP Range）</span></div>
+      <div class="api-row"><span class="method m-get">GET</span><span class="api-path">/t/{hash}.jpg</span><span class="api-desc">缩略图直出</span></div>
+    </div>
+    <p class="api-foot">完整接口清单见 <a href="https://github.com/ck_yeun9/pixsy#api">README · API</a>，或直接看 <a href="https://github.com/ck_yeun9/pixsy/blob/main/internal/api/api.go">api.go</a> 源码。</p>
+  </div>
+</section>
+
+<!-- ============ 页脚 ============ -->
+<footer>
+  <div class="wrap">
+    <div class="links">
+      <a href="https://github.com/ck_yeun9/pixsy" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/ck_yeun9/pixsy/blob/main/docs/design.md" target="_blank" rel="noopener">设计文档</a>
+      <a href="https://github.com/ck_yeun9/pixsy/blob/main/docs/deploy-and-dev-guide.md" target="_blank" rel="noopener">部署指南</a>
+      <a href="https://github.com/ck_yeun9/pixsy/releases" target="_blank" rel="noopener">Releases</a>
+    </div>
+    <p>pixsy · MIT License · 本页本身就是一个零依赖的单文件 HTML，与产品同一套哲学</p>
+    <p>易开元(EOM) 用 ❤ 制作</p>
+  </div>
+</footer>
+
+<script>
+// 部署方式 Tab
+document.querySelectorAll('.tab').forEach(function (t) {
+  t.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (x) { x.setAttribute('aria-selected', 'false'); });
+    document.querySelectorAll('.panel').forEach(function (p) { p.setAttribute('aria-hidden', 'true'); });
+    t.setAttribute('aria-selected', 'true');
+    document.getElementById(t.getAttribute('aria-controls')).setAttribute('aria-hidden', 'false');
+  });
+});
+// 复制按钮
+document.querySelectorAll('.copy').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var text = b.getAttribute('data-copy');
+    var done = function () {
+      var old = b.textContent;
+      b.textContent = '已复制';
+      b.classList.add('ok');
+      setTimeout(function () { b.textContent = old; b.classList.remove('ok'); }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done);
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta); done();
+    }
+  });
+});
+</script>
+</body>
+</html>
