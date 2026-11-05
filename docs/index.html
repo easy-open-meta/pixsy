@@ -346,7 +346,7 @@ footer p{margin-top:6px}
     </div>
 
     <div class="panel" id="p-docker" role="tabpanel" aria-labelledby="t-docker" aria-hidden="false">
-      <button class="copy" data-copy="docker pull yjj6731/pixsy:latest && docker run -d -p 8080:8080 -v ./data:/app/data yjj6731/pixsy:latest">复制</button>
+      <button class="copy">复制</button>
 <pre><span class="cm"># 最快：直接拉取 Docker Hub 镜像</span>
 docker pull yjj6731/pixsy:latest
 docker run -d -p 8080:8080 -v ./data:/app/data yjj6731/pixsy:latest
@@ -360,7 +360,7 @@ docker run -d -p 8080:8080 -v ./data:/app/data pixsy</pre>
     </div>
 
     <div class="panel" id="p-bin" role="tabpanel" aria-labelledby="t-bin" aria-hidden="true">
-      <button class="copy" data-copy="wget https://gitee.com/java-and-net/pixsy/releases/download/v1.0.0/pixsy-linux-amd64 && chmod +x pixsy-linux-amd64 && ./pixsy-linux-amd64">复制</button>
+      <button class="copy">复制</button>
 <pre><span class="cm"># Linux / Windows 产物为 CGO_ENABLED=0 静态单文件（约 12MB）</span>
 <span class="cm"># 版本号以 Releases 页为准：gitee.com/java-and-net/pixsy/releases</span>
 wget https://gitee.com/java-and-net/pixsy/releases/download/v1.0.0/pixsy-linux-amd64
@@ -371,7 +371,7 @@ chmod +x pixsy-linux-amd64
     </div>
 
     <div class="panel" id="p-src" role="tabpanel" aria-labelledby="t-src" aria-hidden="true">
-      <button class="copy" data-copy="npm --prefix web install && npm --prefix web run build && go build -o pixsy ./cmd/pixsy && ./pixsy">复制</button>
+      <button class="copy">复制</button>
 <pre><span class="cm"># 1. 构建前端（输出 web/dist，供 go:embed 内嵌）</span>
 npm --prefix web install
 npm --prefix web run build
@@ -941,10 +941,20 @@ document.getElementById('themeToggle').addEventListener('click', function () {
   }
   try { localStorage.setItem('pixsy-theme', dark ? 'light' : 'dark'); } catch (e) {}
 });
-// 复制按钮
+// 复制按钮：取所在面板 <pre> 的实际内容，跳过注释行与行内注释
 document.querySelectorAll('.copy').forEach(function (b) {
   b.addEventListener('click', function () {
-    var text = b.getAttribute('data-copy');
+    var pre = b.parentElement.querySelector('pre');
+    var text = pre ? pre.textContent : '';
+    text = text.split('\n')
+      .filter(function (line) {
+        var t = line.trim();
+        return t && !t.startsWith('#');   // 跳过注释行与空行
+      })
+      .map(function (line) {
+        return line.replace(/\s+#.*$/, '').trimEnd();  // 去掉行尾注释
+      })
+      .join('\n');
     var done = function () {
       var old = b.textContent;
       b.textContent = '已复制';
