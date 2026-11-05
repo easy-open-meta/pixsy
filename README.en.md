@@ -231,6 +231,8 @@ Runtime settings live in the database and take effect immediately:
 
 ## Usage
 
+> 📖 New here? Check out the **[User Guide](docs/user-guide.md)** — a beginner-friendly handbook for deployment, features, and day-to-day operations.
+
 ### Web UI
 
 - **Home**: multi-select upload with per-file progress, paginated browsing of "My images" / "All images" (admin only), one-click link copying, deletion
