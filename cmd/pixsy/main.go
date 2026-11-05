@@ -106,7 +106,12 @@ func run(args []string, logger *slog.Logger) error {
 	httpSrv := &http.Server{
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		// security: 限制请求体读取与响应写入时长，慢速连接（slowloris 式
+		// 传 body / 慢读响应）不再能无限占用 goroutine。上传大文件时
+		// MaxBytesReader 已限制总量，120s 足够 20MB 级默认配置走完。
+		ReadTimeout:  120 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	errc := make(chan error, 1)
@@ -118,6 +123,13 @@ func run(args []string, logger *slog.Logger) error {
 		}
 		errc <- nil
 	}()
+
+	// 引导安全提示：首个注册者自动成为管理员——把实例暴露到公网前
+	// 应先完成注册并关闭注册（§3.2），否则存在管理员抢注窗口。
+	if n, err := model.CountUsers(context.Background(), db); err == nil && n == 0 {
+		logger.Warn("no admin registered yet: the first user to register becomes admin — " +
+			"register now, then disable allow_register before exposing to the network")
+	}
 
 	if cfg.OpenBrowser {
 		if u := browseURL(cfg.Addr); u != "" {
@@ -168,8 +180,11 @@ func openBrowser(url string) (bool, error) {
 	if runtime.GOOS != "windows" {
 		return false, nil
 	}
-	if err := exec.Command("cmd", "/c", "start", "", url).Start(); err != nil {
+	cmd := exec.Command("cmd", "/c", "start", "", url)
+	if err := cmd.Start(); err != nil {
 		return false, err
 	}
+	// 回收子进程句柄，避免长驻服务里留下未 Wait 的进程对象。
+	go func() { _ = cmd.Wait() }()
 	return true, nil
 }

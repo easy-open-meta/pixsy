@@ -56,6 +56,8 @@ func CodeFor(status int) string {
 // JSON 写入任意响应体。
 func JSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// security: API 响应可能带用户数据，禁止任何缓存层落盘。
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if v == nil {
 		return

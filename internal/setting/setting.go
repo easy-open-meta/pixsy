@@ -4,6 +4,7 @@ package setting
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -115,6 +116,10 @@ func (s *Store) Get() Values {
 	return s.cur
 }
 
+// ErrInvalidSettings 包装参数校验类错误：调用方（API）可以据此把校验
+// 文案回显给用户，而 DB/驱动内部错误只返回通用文案、详情进日志。
+var ErrInvalidSettings = errors.New("invalid settings")
+
 // Update 应用 patch，校验通过后写库并刷新缓存。
 func (s *Store) Update(ctx context.Context, p Patch) (Values, error) {
 	s.mu.Lock()
@@ -123,7 +128,7 @@ func (s *Store) Update(ctx context.Context, p Patch) (Values, error) {
 	next := s.cur
 	if p.SiteName != nil {
 		if len([]rune(*p.SiteName)) == 0 || len([]rune(*p.SiteName)) > 64 {
-			return next, fmt.Errorf("站点名称需为 1~64 个字符")
+			return next, fmt.Errorf("%w: 站点名称需为 1~64 个字符", ErrInvalidSettings)
 		}
 		next.SiteName = *p.SiteName
 	}
@@ -135,13 +140,13 @@ func (s *Store) Update(ctx context.Context, p Patch) (Values, error) {
 	}
 	if p.MaxUploadMB != nil {
 		if *p.MaxUploadMB < config.MinUploadMB || *p.MaxUploadMB > config.MaxUploadMB {
-			return next, fmt.Errorf("单文件上限需在 %d~%d MB 之间", config.MinUploadMB, config.MaxUploadMB)
+			return next, fmt.Errorf("%w: 单文件上限需在 %d~%d MB 之间", ErrInvalidSettings, config.MinUploadMB, config.MaxUploadMB)
 		}
 		next.MaxUploadMB = *p.MaxUploadMB
 	}
 	if p.MaxBatch != nil {
 		if *p.MaxBatch < 1 || *p.MaxBatch > MaxBatchLimit {
-			return next, fmt.Errorf("批量上限需在 1~%d 之间", MaxBatchLimit)
+			return next, fmt.Errorf("%w: 批量上限需在 1~%d 之间", ErrInvalidSettings, MaxBatchLimit)
 		}
 		next.MaxBatch = *p.MaxBatch
 	}

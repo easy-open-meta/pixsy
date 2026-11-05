@@ -11,7 +11,7 @@ COPY web/ .
 RUN npm run build
 
 # 阶段 2：编译后端（CGO_ENABLED=0 + 纯 Go SQLite，产物为静态单文件）
-FROM golang:1.23-alpine AS app
+FROM golang:1.27-alpine AS app
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

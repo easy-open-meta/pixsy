@@ -2,6 +2,7 @@
   "port": 8080,
   "data": "./data",
   "base_url": "",
+  "trusted_proxies": "",
   "jwt_secret": "",
   "static_dir": "",
   "settings": {

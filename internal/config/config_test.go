@@ -217,3 +217,17 @@ func TestConfigFileErrors(t *testing.T) {
 		})
 	}
 }
+
+// 显式传空的 --data/PIXSY_DATA 应触发 Validate 报错，
+// 而不是被 filepath.Clean("") 静默变成 "."（会把数据写进当前目录）。
+func TestLoadRejectsEmptyDataFlag(t *testing.T) {
+	clearEnv(t)
+	chdir(t, t.TempDir())
+
+	if _, err := Load([]string{"--data", ""}, io.Discard); err == nil {
+		t.Fatal("Load(--data \"\") succeeded, want validation error")
+	}
+	if _, err := Load([]string{}, io.Discard); err != nil {
+		t.Fatalf("Load(default) failed: %v", err)
+	}
+}

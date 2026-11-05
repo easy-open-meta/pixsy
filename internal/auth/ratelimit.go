@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -15,6 +16,10 @@ type Limiter struct {
 	buckets   map[string]*bucket
 	lastSweep time.Time
 }
+
+// maxBuckets bounds the map between sweeps: an attacker rotating keys at high
+// frequency cannot grow memory unboundedly inside one cleanup period.
+const maxBuckets = 10000
 
 type bucket struct {
 	tokens float64
@@ -70,9 +75,11 @@ func (l *Limiter) AllowAt(key string, now time.Time) bool {
 	return true
 }
 
-// sweep drops buckets that have fully refilled, keeping memory bounded.
+// sweep drops buckets that have fully refilled, keeping memory bounded. When
+// the map still exceeds maxBuckets (all buckets are fresh), the oldest half is
+// evicted so a key-rotation flood cannot grow memory without limit.
 func (l *Limiter) sweep(now time.Time) {
-	if now.Sub(l.lastSweep) < l.period {
+	if now.Sub(l.lastSweep) < l.period && len(l.buckets) < maxBuckets {
 		return
 	}
 	l.lastSweep = now
@@ -80,5 +87,21 @@ func (l *Limiter) sweep(now time.Time) {
 		if now.Sub(b.seen) >= l.period {
 			delete(l.buckets, k)
 		}
+	}
+	if len(l.buckets) < maxBuckets {
+		return
+	}
+	// 收集并按 seen 淘汰最旧的一半；极端情况下才走到这里，O(n log n) 可接受。
+	type kv struct {
+		k string
+		b *bucket
+	}
+	all := make([]kv, 0, len(l.buckets))
+	for k, b := range l.buckets {
+		all = append(all, kv{k, b})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].b.seen.Before(all[j].b.seen) })
+	for _, e := range all[:len(all)/2] {
+		delete(l.buckets, e.k)
 	}
 }

@@ -61,8 +61,28 @@ func New(opts Options) *Server {
 	return s
 }
 
-// Handler 返回带请求日志的根处理器。
-func (s *Server) Handler() http.Handler { return s.logRequests(s.mux) }
+// Handler 返回带安全响应头与请求日志的根处理器。
+func (s *Server) Handler() http.Handler { return s.securityHeaders(s.logRequests(s.mux)) }
+
+// securityHeaders 为所有响应补齐基础安全头（§3.5）。
+// security: 前端 SPA 无内联脚本，可上严格 CSP；frame-ancestors 'none'
+// 阻止后台页被点击劫持；HSTS 只在 TLS（含反代终结）时下发。
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; img-src * data:; script-src 'self'; "+
+				"style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; "+
+				"frame-ancestors 'none'")
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // ---------------------------------------------------------------- 图片直出
 

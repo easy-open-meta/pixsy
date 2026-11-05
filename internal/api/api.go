@@ -6,12 +6,17 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"html"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/pixsy/pixsy/internal/auth"
 	"github.com/pixsy/pixsy/internal/httpx"
@@ -23,39 +28,48 @@ import (
 const (
 	defaultPageSize = 40
 	maxPageSize     = 100
+	maxPage         = 100000 // 远超实际数据量，只为给 offset 计算兜底
 	maxJSONBody     = 1 << 20
 )
 
 // Options 组装 API 处理器所需的依赖。
 type Options struct {
-	DB       *sql.DB
-	Settings *setting.Store
-	Store    *storage.Store
-	Auth     *auth.Manager
-	BaseURL  string
+	DB             *sql.DB
+	Settings       *setting.Store
+	Store          *storage.Store
+	Auth           *auth.Manager
+	BaseURL        string
+	TrustedProxies []*net.IPNet // 可信代理网段；空表示直连部署，忽略 X-Forwarded-*
+	// AllowPrivateHosts 允许 Lsky 迁移指向内网地址（默认拒绝，防 SSRF）。
+	// 仅用于测试环境，或用户明确要迁移局域网内自建 Lsky 的场景。
+	AllowPrivateHosts bool
 }
 
 // Server 持有 API 处理器共享的依赖。
 type Server struct {
-	db        *sql.DB
-	settings  *setting.Store
-	store     *storage.Store
-	auth      *auth.Manager
-	baseURL   string
-	rateLimit *auth.Limiter
-	migrator  *lskyMigrator
+	db                *sql.DB
+	settings          *setting.Store
+	store             *storage.Store
+	auth              *auth.Manager
+	baseURL           string
+	trustedProxies    []*net.IPNet
+	allowPrivateHosts bool
+	rateLimit         *auth.Limiter
+	migrator          *lskyMigrator
 }
 
 // New 创建 API 处理器。
 func New(opts Options) *Server {
 	return &Server{
-		db:        opts.DB,
-		settings:  opts.Settings,
-		store:     opts.Store,
-		auth:      opts.Auth,
-		baseURL:   strings.TrimRight(opts.BaseURL, "/"),
-		rateLimit: auth.NewLimiter(5, time.Minute),
-		migrator:  &lskyMigrator{},
+		db:                opts.DB,
+		settings:          opts.Settings,
+		store:             opts.Store,
+		auth:              opts.Auth,
+		baseURL:           strings.TrimRight(opts.BaseURL, "/"),
+		trustedProxies:    opts.TrustedProxies,
+		allowPrivateHosts: opts.AllowPrivateHosts,
+		rateLimit:         auth.NewLimiter(5, time.Minute),
+		migrator:          &lskyMigrator{},
 	}
 }
 
@@ -99,7 +113,7 @@ type credentials struct {
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if !s.rateLimit.Allow(auth.ClientIP(r)) {
+	if !s.rateLimit.Allow(auth.ClientIP(r, s.trustedProxies)) {
 		httpx.Fail(w, http.StatusTooManyRequests, "操作过于频繁，请稍后再试")
 		return
 	}
@@ -114,6 +128,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := auth.ValidatePassword(in.Password); err != nil {
 		httpx.Fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// 注册开关检查放在 bcrypt 之前：关闭注册时被拒绝的请求
+	// 不应白白消耗一次 cost 10 的哈希 CPU。
+	if err := s.checkRegisterOpen(r.Context()); err != nil {
+		httpx.Fail(w, http.StatusForbidden, err.Error())
 		return
 	}
 	pwHash, err := auth.HashPassword(in.Password)
@@ -144,6 +164,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+
 	u, err := model.CreateUserTx(ctx, tx, name, pwHash, role)
 	if err != nil {
 		if errors.Is(err, model.ErrUsernameTaken) || model.IsUniqueViolation(err) {
@@ -160,8 +181,30 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	httpx.Data(w, http.StatusOK, map[string]any{"user": u})
 }
 
+func (s *Server) checkRegisterOpen(ctx context.Context) error {
+	if s.settings.Get().AllowRegister {
+		return nil
+	}
+	// 无任何用户时首个注册即管理员，不受 allow_register 限制（§3.2、§3.7）。
+	count, err := model.CountUsers(ctx, s.db)
+	if err != nil {
+		return errors.New("注册已关闭")
+	}
+	if count == 0 {
+		return nil
+	}
+	return errors.New("注册已关闭")
+}
+
+// dummyHash 与线上 bcrypt cost 相同，登录时对不存在的用户也跑一次比较，
+// 抹平「用户不存在」与「密码错误」的时延差，防用户名枚举时序预言机。
+var dummyHash = func() string {
+	h, _ := bcrypt.GenerateFromPassword([]byte("pixsy-dummy-password"), 10)
+	return string(h)
+}()
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.rateLimit.Allow(auth.ClientIP(r)) {
+	if !s.rateLimit.Allow(auth.ClientIP(r, s.trustedProxies)) {
 		httpx.Fail(w, http.StatusTooManyRequests, "操作过于频繁，请稍后再试")
 		return
 	}
@@ -172,6 +215,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	u, err := model.GetUserByName(r.Context(), s.db, auth.NormalizeUsername(in.Username))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			// security: 与命中用户的路径做等量 bcrypt 运算，消除用户枚举时序侧信道。
+			auth.CheckPassword(dummyHash, in.Password)
 			httpx.Fail(w, http.StatusUnauthorized, "用户名或密码错误")
 			return
 		}
@@ -214,6 +259,9 @@ type imageOut struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// baseURLFor 返回生成图片外链用的站点前缀。显式配置的 base_url 优先；
+// 否则从请求推断。X-Forwarded-* 仅当连接来自可信代理时才采信，
+// 且 scheme/host 都做格式校验——伪造头无法注入引号或脚本进生成的链接。
 func (s *Server) baseURLFor(r *http.Request) string {
 	if s.baseURL != "" {
 		return s.baseURL
@@ -222,27 +270,57 @@ func (s *Server) baseURLFor(r *http.Request) string {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	if p := r.Header.Get("X-Forwarded-Proto"); p != "" {
-		scheme = p
-	}
 	host := r.Host
-	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
-		host = h
+	if auth.RemoteAddrInNets(r, s.trustedProxies) {
+		if p := r.Header.Get("X-Forwarded-Proto"); p == "http" || p == "https" {
+			scheme = p
+		}
+		if h := r.Header.Get("X-Forwarded-Host"); validHost(h) {
+			host = h
+		}
+	}
+	// security: Host/转发头不可信时只接受合法主机名字符，防止拼接出
+	// javascript: 等异常 scheme 或带引号注入 HTML 属性。
+	if !validHost(host) {
+		host = ""
+	}
+	if host == "" {
+		return ""
 	}
 	return scheme + "://" + host
+}
+
+// validHost 校验主机名/IP[:port] 只含 URL host 的合法字符。
+func validHost(host string) bool {
+	if host == "" || len(host) > 253 {
+		return false
+	}
+	for _, c := range host {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '.' || c == '-' || c == ':' || c == '[' || c == ']':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) present(r *http.Request, img *model.Image) imageOut {
 	base := s.baseURLFor(r)
 	raw := base + "/i/" + img.Hash + "." + img.Ext
 	thumb := base + "/t/" + img.Hash + ".jpg"
+	// security: html 片段必须转义——文件名与 host 虽经 sanitize/校验，
+	// 这里仍按不可信数据处理，杜绝未来改动引入的注入面。
+	htmlAttr := html.EscapeString(raw)
+	alt := html.EscapeString(img.Filename)
 	return imageOut{
 		ID:        img.ID,
 		Filename:  img.Filename,
 		URL:       raw,
 		ThumbURL:  thumb,
 		Markdown:  "![" + img.Filename + "](" + raw + ")",
-		HTML:      `<img src="` + raw + `" alt="` + img.Filename + `" />`,
+		HTML:      `<img src="` + htmlAttr + `" alt="` + alt + `" />`,
 		BBCode:    "[img]" + raw + "[/img]",
 		Size:      img.Size,
 		Width:     img.Width,
@@ -271,8 +349,12 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	if maxBatch <= 0 {
 		maxBatch = setting.DefaultMaxBatch
 	}
-	// 预检：整体请求体远超上限时直接拒绝（多文件总和 + multipart 开销）。
-	if r.ContentLength > 0 && r.ContentLength > maxBytes*int64(maxBatch)+(1<<20) {
+	// 整体请求体上限：多文件总和 + multipart 开销。
+	// security: 无条件包 MaxBytesReader——ContentLength 预检在
+	// Transfer-Encoding: chunked 时为 -1，可被绕过，不能只靠它。
+	totalLimit := maxBytes*int64(maxBatch) + (1 << 20)
+	r.Body = http.MaxBytesReader(w, r.Body, totalLimit)
+	if r.ContentLength > 0 && r.ContentLength > totalLimit {
 		httpx.Fail(w, http.StatusRequestEntityTooLarge, "文件超出体积上限")
 		return
 	}
@@ -369,10 +451,18 @@ func (s *Server) record(ctx context.Context, userID int64, filename string, res 
 
 func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 	u := auth.UserFrom(r.Context())
+	if u == nil {
+		httpx.Fail(w, http.StatusUnauthorized, "请先登录")
+		return
+	}
 	q := r.URL.Query()
 	page := atoiDefault(q.Get("page"), 1)
 	if page < 1 {
 		page = 1
+	}
+	// 页码上限防止 (page-1)*size 在 int 上溢出成负数 offset。
+	if page > maxPage {
+		page = maxPage
 	}
 	size := atoiDefault(q.Get("page_size"), defaultPageSize)
 	if size < 1 {
@@ -402,6 +492,10 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	u := auth.UserFrom(r.Context())
+	if u == nil {
+		httpx.Fail(w, http.StatusUnauthorized, "请先登录")
+		return
+	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
 		httpx.Fail(w, http.StatusBadRequest, "无效的图片 ID")
@@ -432,7 +526,10 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	// 内容寻址：仅当没有其它记录引用同一 hash 时才删除磁盘文件（§3.1），
 	// 同时清理指向它的旧路径别名。
 	refs, err := model.CountImagesByHash(ctx, s.db, img.Hash)
-	if err == nil && refs == 0 {
+	if err != nil {
+		// 引用数未知时宁可不删文件，避免误删其它记录仍在使用的原图。
+		slog.Warn("count image refs failed", "hash", img.Hash, "err", err)
+	} else if refs == 0 {
 		_ = s.store.Remove(img.Hash, img.Ext)
 		_ = model.DeleteAliasesByHash(ctx, s.db, img.Hash)
 	}
@@ -452,7 +549,14 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.settings.Update(r.Context(), p)
 	if err != nil {
-		httpx.Fail(w, http.StatusBadRequest, err.Error())
+		// security: 校验错误回显文案；DB/驱动内部错误只回通用文案，
+		// 原始错误进日志，避免向客户端暴露存储层细节。
+		if errors.Is(err, setting.ErrInvalidSettings) {
+			httpx.Fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		slog.Error("update settings failed", "err", err)
+		httpx.Fail(w, http.StatusInternalServerError, "保存设置失败")
 		return
 	}
 	httpx.Data(w, http.StatusOK, v)
@@ -496,7 +600,12 @@ func sanitizeFilename(name string) string {
 		return "image"
 	}
 	if len(name) > 200 {
-		name = name[:200]
+		// 按字节上限截断时退到 rune 边界，避免把多字节字符切成半个。
+		cut := 200
+		for cut > 0 && !utf8.RuneStart(name[cut]) {
+			cut--
+		}
+		name = name[:cut]
 	}
 	return name
 }

@@ -334,9 +334,49 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
+        # 必须传递协议，否则 pixsy 在 HTTPS 站点上生成的图片外链是 http://，
+        # 浏览器会按混合内容拦截。
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
+
+#### trusted_proxies：声明哪些代理可信
+
+pixsy 只信任来自**可信代理网段**的 `X-Forwarded-*` 头（用于识别真实客户端 IP 和
+HTTPS 协议）。这是安全设计：不配置时伪造 `X-Forwarded-For` 无法绕过登录限速，
+HTTPS 反代后的外链也不会被恶意头篡改。
+
+反代部署需要在配置里声明代理网段，否则：
+
+- HTTPS 下生成的图片外链会退化成 `http://`（混合内容拦截）；
+- 所有用户共享代理 IP 的一个限流桶。
+
+在 `pixsy.json` 顶层加一行（或用环境变量 `PIXSY_TRUSTED_PROXIES`、命令行
+`--trusted-proxies`，优先级 flag > 环境变量 > 配置文件）：
+
+```json
+{
+  "port": 8080,
+  "trusted_proxies": "127.0.0.1/32",
+  "settings": { }
+}
+```
+
+| 部署形态 | 填什么 |
+|---|---|
+| Nginx 与 pixsy 同机（非容器） | `127.0.0.1/32` |
+| Docker 部署，Nginx 在另一容器 | `172.16.0.0/12`（Docker 默认网段） |
+| 独立 Nginx 服务器（如 10.0.0.5） | `10.0.0.5/32` 或所在内网段 |
+| CDN / 云负载均衡回源 | 固定回源 IP 段；没有固定段则不配 |
+
+注意：
+
+- **不要配成 `0.0.0.0/0`**——等于把信任判断关掉，伪造 XFF 又能绕限速；
+- **直连部署（无反代）保持不配**，即最安全形态；
+- 配好后验证：HTTPS 下登录一次，上传图片确认复制的外链是 `https://` 开头；
+  连续 5 次错误密码第 6 次应提示「操作过于频繁」。
 
 若图片走独立 CDN 域名，设置 `--base-url`（或 `PIXSY_BASE_URL`）让外链统一生成 CDN 前缀。
 

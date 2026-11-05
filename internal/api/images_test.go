@@ -382,3 +382,27 @@ func strconvFormatInt(v int64) string {
 }
 
 var _ = bytes.MinRead
+
+// 页码是用户输入：超大页码不能让 (page-1)*size 溢出成负 offset，
+// 应稳定返回空列表而不是 500。
+func TestListImagesRejectsAbsurdPage(t *testing.T) {
+	env := newEnv(t)
+	env.register(t, "admin", testPassword)
+	token := env.login(t, "admin", testPassword)
+	env.mustUpload(t, token, "a.png", pngBytes(t, 8, 8))
+
+	res, body := env.rawJSON(t, http.MethodGet,
+		"/api/v1/images?page=9223372036854775807&page_size=100", nil, token)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", res.StatusCode, body)
+	}
+	var list struct {
+		Data struct {
+			Images []uploaded `json:"images"`
+		} `json:"data"`
+	}
+	decode(t, body, &list)
+	if len(list.Data.Images) != 0 {
+		t.Fatalf("expected empty page for absurd page number, got %d items", len(list.Data.Images))
+	}
+}

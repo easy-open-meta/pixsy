@@ -91,6 +91,10 @@ func Open(dataDir string) (*Store, error) {
 
 // Path 返回原图路径：files/ab/cd/<hash>.<ext>（§3.4 step 4）。
 func (s *Store) Path(hash, ext string) string {
+	if len(hash) < 4 {
+		// 防御：正常 hash 是 64 位 hex；异常短值退化为扁平路径而不是切片越界 panic。
+		return filepath.Join(s.filesDir, hash+"."+ext)
+	}
 	return filepath.Join(s.filesDir, hash[:2], hash[2:4], hash+"."+ext)
 }
 

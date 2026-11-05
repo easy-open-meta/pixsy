@@ -228,6 +228,8 @@ What happens next:
 - Click **Cancel migration** at any time to stop (whatever already transferred stays).
 
 > Requirements: the pixsy server must be able to reach the old Lsky site, and the Lsky account must own the images. Prefer a terminal? The bundled script `scripts/migrate-lsky.mjs` does the same thing from the command line.
+>
+> For security reasons, the Lsky address **cannot be a loopback or private network address** (e.g. `127.0.0.1`, `192.168.x.x`) — this prevents the migration tool from being abused to probe internal networks. If your old Lsky lives on the same internal network, expose it via a public domain first. Note that images served behind a redirect (e.g. anti-hotlinking) will be recorded as failures.
 
 ---
 

@@ -13,8 +13,10 @@ import (
 
 // dsn pragmas matter for a low-spec box: WAL keeps readers unblocked by the
 // writer, busy_timeout absorbs write contention, and foreign_keys enforces the
-// images.user_id reference.
-const dsnSuffix = "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)" +
+// images.user_id reference. _txlock=immediate makes transactions take the
+// write lock up front — WAL 下 deferred 事务「先读后写」升级会撞
+// SQLITE_BUSY_SNAPSHOT（busy_timeout 不生效），并发注册会 500。
+const dsnSuffix = "?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)" +
 	"&_pragma=foreign_keys(ON)&_pragma=synchronous(NORMAL)"
 
 // Open opens (creating if needed) the SQLite database at dataDir/pixsy.db and
@@ -65,6 +67,9 @@ CREATE TABLE IF NOT EXISTS images (
 );
 CREATE INDEX IF NOT EXISTS idx_images_user ON images(user_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_images_hash ON images(hash);
+-- 同用户同内容幂等（§3.4 step 6）：并发上传同文件靠唯一索引兜底，
+-- 否则 record() 撞约束回读的注释只是空想，会产生重复行。
+CREATE UNIQUE INDEX IF NOT EXISTS uq_images_user_hash ON images(user_id, hash);
 
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
@@ -88,8 +93,19 @@ func Migrate(db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("migrate schema: %w", err)
 	}
+	// uq_images_user_hash 是后加的唯一索引：建索引前先按 (user_id, hash)
+	// 去重存量数据（保留最小 id），否则历史库里已有重复行时建索引失败。
+	if _, err := db.ExecContext(ctx, dedupeImagesSQL); err != nil {
+		return fmt.Errorf("dedupe images before unique index: %w", err)
+	}
 	return nil
 }
+
+// dedupeImagesSQL 删除同 (user_id, hash) 的多余记录（幂等：无重复时删 0 行）。
+const dedupeImagesSQL = `
+DELETE FROM images WHERE id NOT IN (
+  SELECT MIN(id) FROM images GROUP BY user_id, hash
+);`
 
 // Ping verifies the database is reachable.
 func Ping(db *sql.DB) error {

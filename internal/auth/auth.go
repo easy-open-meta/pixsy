@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,6 +30,10 @@ const (
 	MaxUsernameLen = 32
 	// minSecretLen keeps auto-generated and explicit secrets alike unguessable.
 	minSecretLen = 16
+
+	// tokenIssuer / tokenAudience 绑定 JWT 的签发方与受众，防跨服务混用密钥。
+	tokenIssuer   = "pixsy"
+	tokenAudience = "pixsy-api"
 )
 
 // ErrInvalidToken is returned by Parse for any unusable token.
@@ -40,6 +45,7 @@ var (
 	// ErrInvalidUsername / ErrInvalidPassword carry user-facing messages.
 	ErrInvalidUsername = errors.New("用户名需为 3~32 位字母、数字或下划线")
 	ErrInvalidPassword = errors.New("密码至少 8 位")
+	ErrPasswordTooLong = errors.New("密码最多 72 字节（约 24 个汉字）")
 )
 
 // Manager issues and verifies HS256 tokens.
@@ -70,6 +76,8 @@ func (m *Manager) Issue(uid int64, role string) (string, error) {
 		Role: role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(uid, 10),
+			Issuer:    tokenIssuer,
+			Audience:  jwt.ClaimStrings{tokenAudience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(TokenTTL)),
 		},
@@ -82,7 +90,11 @@ func (m *Manager) Parse(token string) (*Claims, error) {
 	claims := &Claims{}
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		return m.secret, nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		// security: 绑定签发方/受众——同一 secret 被其他服务复用时，
+		// 其他服务签发的 token 不会被本服务接受。
+		jwt.WithIssuer(tokenIssuer),
+		jwt.WithAudience(tokenAudience))
 	if err != nil || !parsed.Valid {
 		return nil, ErrInvalidToken
 	}
@@ -111,10 +123,14 @@ func ValidateUsername(name string) error {
 	return nil
 }
 
-// ValidatePassword enforces a minimum length.
+// ValidatePassword enforces a minimum length. bcrypt 只取前 72 字节，
+// 超长密码会在注册时触发 ErrPasswordTooLong（500）——这里提前拦下。
 func ValidatePassword(password string) error {
 	if utf8.RuneCountInString(password) < MinPasswordLen {
 		return ErrInvalidPassword
+	}
+	if len(password) > 72 {
+		return ErrPasswordTooLong
 	}
 	return nil
 }
@@ -132,6 +148,13 @@ func LoadSecret(dataDir, explicit string) ([]byte, error) {
 	}
 	path := filepath.Join(dataDir, "jwt.secret")
 	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) > 0 {
+		// Best effort：历史文件可能是宽松权限（umask 0022 建的旧版本），
+		// 读取时顺手收紧到 0600；失败仅告警不阻塞启动。
+		if fi, ferr := os.Stat(path); ferr == nil && fi.Mode().Perm() != 0o600 {
+			if cerr := os.Chmod(path, 0o600); cerr == nil {
+				slog.Info("tightened jwt.secret permissions", "path", path, "mode", "0600")
+			}
+		}
 		return []byte(strings.TrimSpace(string(b))), nil
 	} else if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read jwt secret: %w", err)

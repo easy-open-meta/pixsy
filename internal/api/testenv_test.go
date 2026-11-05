@@ -76,7 +76,8 @@ func newEnvSeeded(t *testing.T, seed func(*testEnv)) *testEnv {
 	}
 	env.settings = settings
 
-	apiSrv := api.New(api.Options{DB: db, Settings: settings, Store: store, Auth: mgr})
+	// AllowPrivateHosts: 测试里的假 Lsky 是 httptest 的 127.0.0.1 服务。
+	apiSrv := api.New(api.Options{DB: db, Settings: settings, Store: store, Auth: mgr, AllowPrivateHosts: true})
 	srv := server.New(server.Options{API: apiSrv.Handler(), Store: store, DB: db})
 	env.handler = srv.Handler()
 	return env

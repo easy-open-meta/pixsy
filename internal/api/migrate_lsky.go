@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -202,7 +203,7 @@ func (s *Server) handleStartLskyMigration(w http.ResponseWriter, r *http.Request
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	base, err := normalizeLskyBase(in.BaseURL)
+	base, err := s.normalizeLskyBase(in.BaseURL)
 	if err != nil {
 		httpx.Fail(w, http.StatusBadRequest, err.Error())
 		return
@@ -251,14 +252,37 @@ func (s *Server) handleLskyMigrationCSV(w http.ResponseWriter, _ *http.Request) 
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"lsky_name", "lsky_url", "pixsy_url", "pixsy_markdown", "status", "error"})
 	for _, r := range rows {
-		_ = cw.Write([]string{r.Name, r.LskyURL, r.PixsyURL, r.Markdown, r.Status, r.Error})
+		// security: Lsky 返回的文件名来自远端用户的原始上传名，可能以
+		// = + - @ 开头——Excel/WPS 打开 CSV 时会被当公式执行（CSV 注入）。
+		// 每个单元格统一做公式中和。
+		_ = cw.Write([]string{
+			neutralizeCSVFormula(r.Name),
+			neutralizeCSVFormula(r.LskyURL),
+			neutralizeCSVFormula(r.PixsyURL),
+			neutralizeCSVFormula(r.Markdown),
+			r.Status,
+			neutralizeCSVFormula(r.Error),
+		})
 	}
 	cw.Flush()
 }
 
+// neutralizeCSVFormula 在以公式前导字符开头的单元格前加单引号，
+// 使 Excel/WPS 按文本处理；status 只为 ok/fail 常量，无需处理。
+func neutralizeCSVFormula(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
+}
+
 // ---------------------------------------------------------------- 任务执行
 
-func normalizeLskyBase(raw string) (string, error) {
+func (s *Server) normalizeLskyBase(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", errors.New("请填写 Lsky 地址")
@@ -270,7 +294,27 @@ func normalizeLskyBase(raw string) (string, error) {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return "", errors.New("Lsky 地址必须以 http:// 或 https:// 开头")
 	}
+	// security: 迁移目标默认必须是公网地址——拦截回环/私网/链路本地
+	// （含云元数据 169.254.169.254），防止迁移功能被当成内网探测跳板。
+	// 局域网自建 Lsky 的用户可显式开启（Options.AllowPrivateHosts）。
+	if !s.allowPrivateHosts {
+		host := u.Host
+		if h, _, err := net.SplitHostPort(u.Host); err == nil {
+			host = h
+		} else {
+			host = strings.Trim(u.Host, "[]")
+		}
+		if ip := net.ParseIP(host); ip != nil && isPrivateIP(ip) {
+			return "", errors.New("Lsky 地址不能指向内网或本机地址")
+		}
+	}
 	return u.Scheme + "://" + u.Host + strings.TrimRight(u.Path, "/"), nil
+}
+
+// isPrivateIP 报告 ip 是否为回环/私网/链路本地地址。
+func isPrivateIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsUnspecified()
 }
 
 func (s *Server) runLskyMigration(ctx context.Context, job lskyJob) error {
@@ -282,7 +326,14 @@ func (s *Server) runLskyMigration(ctx context.Context, job lskyJob) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	downloadClient := &http.Client{Timeout: lskyClientTimeout}
+	// security: 下载不跟随重定向——远端 302 到内网地址会被 downloadClient
+	// 原样请求，成为绕过 normalizeLskyBase 的第二跳 SSRF。
+	downloadClient := &http.Client{
+		Timeout: lskyClientTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 
 	token, err := lskyLogin(ctx, apiClient, job.baseURL, job.email, job.password)
 	if err != nil {

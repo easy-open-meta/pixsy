@@ -9,5 +9,8 @@ services:
       # - PIXSY_BASE_URL=https://img.example.com
       # 生产环境建议显式指定 JWT 密钥（勿提交真实值到仓库）
       # - PIXSY_JWT_SECRET=change-me
+      # 反代部署时声明可信代理网段（Docker 内的 nginx 一般填 172.16.0.0/12），
+      # 否则 HTTPS 下外链会生成 http:// 前缀；直连部署保持注释即最安全形态
+      # - PIXSY_TRUSTED_PROXIES=172.16.0.0/12
     volumes: ["./data:/app/data"]
     restart: unless-stopped

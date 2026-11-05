@@ -53,6 +53,14 @@ func GetImage(ctx context.Context, db *sql.DB, id int64) (*Image, error) {
 // ListImages returns one page plus the total row count. all=true ignores the
 // owner filter (admin scope=all, §3.3).
 func ListImages(ctx context.Context, db *sql.DB, userID int64, all bool, limit, offset int) ([]*Image, int, error) {
+	// 分页参数来自 HTTP 查询串：负数 offset 在 SQLite 里会被当成 0，
+	// 这里显式夹紧，避免调用方拿到与请求不符的结果。
+	if limit < 1 {
+		limit = 1
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	where := ` WHERE user_id = ?`
 	args := []any{userID}
 	if all {

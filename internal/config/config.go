@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,6 +52,7 @@ type fileConfig struct {
 	JWTSecret   *string       `json:"jwt_secret"`
 	StaticDir   *string       `json:"static_dir"`
 	OpenBrowser *bool         `json:"open_browser"`
+	TrustedProxies *string    `json:"trusted_proxies"`
 	Settings    *FileSettings `json:"settings"`
 }
 
@@ -65,7 +67,15 @@ type Config struct {
 	OpenBrowser bool          // 启动后自动用默认浏览器打开页面；默认仅 Windows 开启
 	ConfigFile  string        // 实际加载的配置文件路径；空表示没有配置文件
 	Settings    *FileSettings // 配置文件里的后台设置覆盖项；nil 表示不覆盖
+
+	// TrustedProxiesRaw 是可信代理网段（CIDR 或单 IP，逗号分隔）；空表示直连部署、
+	// 完全不信任 X-Forwarded-*。ParsedTrustedProxies 在 Validate 后可用。
+	TrustedProxiesRaw   string
+	parsedTrustedProxies []*net.IPNet
 }
+
+// ParsedTrustedProxies 返回解析后的可信代理网段；仅 Validate 成功后可用。
+func (c *Config) ParsedTrustedProxies() []*net.IPNet { return c.parsedTrustedProxies }
 
 // DBPath 返回 SQLite 文件路径。
 func (c *Config) DBPath() string { return filepath.Join(c.DataDir, "pixsy.db") }
@@ -90,6 +100,7 @@ func Load(args []string, errOut io.Writer) (*Config, error) {
 	jwtSecret := flags.String("jwt-secret", "", "JWT 签名密钥；留空则自动生成并存入数据目录")
 	staticDir := flags.String("static-dir", "", "前端静态资源目录；留空则使用内嵌产物")
 	openBrowser := flags.Bool("open-browser", false, "启动后自动打开浏览器（Windows 默认开启；可用 --open-browser=false 关闭）")
+	trustedProxies := flags.String("trusted-proxies", "", "可信反向代理网段（CIDR，逗号分隔）；留空表示直连部署，忽略 X-Forwarded-* 头")
 	cfgPath := flags.String("config", "", "配置文件路径（JSON）；留空自动加载当前目录的 pixsy.json")
 
 	if err := flags.Parse(args); err != nil {
@@ -154,15 +165,22 @@ func Load(args []string, errOut io.Writer) (*Config, error) {
 		return def
 	}
 
+	// 显式传空的 --data/PIXSY_DATA 要留给 Validate 报错；filepath.Clean("") 会变成 "."。
+	dataDir := pick("data", *data, "PIXSY_DATA", fc.Data, defaultDataDir)
+	if dataDir != "" {
+		dataDir = filepath.Clean(dataDir)
+	}
+
 	cfg := &Config{
 		Addr:        pick("addr", *addr, "PIXSY_ADDR", fc.Addr, defaultAddr),
-		DataDir:     filepath.Clean(pick("data", *data, "PIXSY_DATA", fc.Data, defaultDataDir)),
+		DataDir:     dataDir,
 		BaseURL:     strings.TrimRight(pick("base-url", *baseURL, "PIXSY_BASE_URL", fc.BaseURL, ""), "/"),
 		MaxUploadMB: pickInt("max-upload-mb", *maxMB, "PIXSY_MAX_UPLOAD_MB", nil, defaultMaxUploadMB),
 		JWTSecret:   pick("jwt-secret", *jwtSecret, "PIXSY_JWT_SECRET", fc.JWTSecret, ""),
 		StaticDir:   pick("static-dir", *staticDir, "PIXSY_STATIC_DIR", fc.StaticDir, ""),
 		OpenBrowser: pickBool("open-browser", *openBrowser, "PIXSY_OPEN_BROWSER", fc.OpenBrowser, runtime.GOOS == "windows"),
 		ConfigFile:  loaded,
+		TrustedProxiesRaw: pick("trusted-proxies", *trustedProxies, "PIXSY_TRUSTED_PROXIES", fc.TrustedProxies, ""),
 		Settings:    fc.Settings,
 	}
 	if err := cfg.Validate(); err != nil {
@@ -216,5 +234,42 @@ func (c *Config) Validate() error {
 	if c.BaseURL != "" && !strings.HasPrefix(c.BaseURL, "http://") && !strings.HasPrefix(c.BaseURL, "https://") {
 		return errors.New("base-url 必须以 http:// 或 https:// 开头")
 	}
+	nets, err := parseCIDRs(c.TrustedProxiesRaw)
+	if err != nil {
+		return fmt.Errorf("trusted-proxies: %w", err)
+	}
+	c.parsedTrustedProxies = nets
 	return nil
+}
+
+// parseCIDRs 解析逗号分隔的 CIDR/单 IP 列表；单 IP 视为 /32 或 /128。
+func parseCIDRs(raw string) ([]*net.IPNet, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	var nets []*net.IPNet
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !strings.Contains(part, "/") {
+			ip := net.ParseIP(part)
+			if ip == nil {
+				return nil, fmt.Errorf("无效的网段或 IP：%q", part)
+			}
+			bits := 32
+			if ip.To4() == nil {
+				bits = 128
+			}
+			part = fmt.Sprintf("%s/%d", ip.String(), bits)
+		}
+		_, ipNet, err := net.ParseCIDR(part)
+		if err != nil {
+			return nil, fmt.Errorf("无效的网段：%q", part)
+		}
+		nets = append(nets, ipNet)
+	}
+	return nets, nil
 }

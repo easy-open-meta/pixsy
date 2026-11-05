@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/pixsy/pixsy/internal/storage"
@@ -187,5 +188,16 @@ func TestSaveCursorRejected(t *testing.T) {
 	_, err := s.Save(context.Background(), bytes.NewReader(raw), 1<<20)
 	if !errors.Is(err, storage.ErrUnsupported) {
 		t.Fatalf("err = %v, want ErrUnsupported", err)
+	}
+}
+
+// Path 对异常短的 hash 不能切片越界 panic（防御：正常 hash 恒为 64 位 hex）。
+func TestPathShortHashDoesNotPanic(t *testing.T) {
+	s := openStore(t)
+	for _, hash := range []string{"", "ab", "abc", strings.Repeat("a", 64)} {
+		p := s.Path(hash, "png")
+		if !strings.Contains(p, hash+".png") {
+			t.Fatalf("Path(%q) = %q, want it to end with %q", hash, p, hash+".png")
+		}
 	}
 }
