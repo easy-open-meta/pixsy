@@ -30,30 +30,33 @@ const (
 // FileSettings 是配置文件 settings 段，对应后台页面可改的设置。
 // 用指针区分「文件里没写」和「写了零值」：只有出现的项会在启动时覆盖后台设置。
 type FileSettings struct {
-	SiteName      *string `json:"site_name"`
-	AllowRegister *bool   `json:"allow_register"`
-	AllowUpload   *bool   `json:"allow_upload"`
-	MaxUploadMB   *int    `json:"max_upload_mb"`
-	MaxBatch      *int    `json:"max_batch"`
+	SiteName         *string `json:"site_name"`
+	AllowRegister    *bool   `json:"allow_register"`
+	AllowUpload      *bool   `json:"allow_upload"`
+	MaxUploadMB      *int    `json:"max_upload_mb"`
+	MaxBatch         *int    `json:"max_batch"`
+	HotlinkWhitelist *string `json:"hotlink_whitelist"`
+	HotlinkReferers  *string `json:"hotlink_referers"`
 }
 
 // HasValues 报告是否至少有一项覆盖。
 func (f *FileSettings) HasValues() bool {
 	return f != nil && (f.SiteName != nil || f.AllowRegister != nil ||
-		f.AllowUpload != nil || f.MaxUploadMB != nil || f.MaxBatch != nil)
+		f.AllowUpload != nil || f.MaxUploadMB != nil || f.MaxBatch != nil ||
+		f.HotlinkWhitelist != nil || f.HotlinkReferers != nil)
 }
 
 // fileConfig 是配置文件的反序列化结构；未出现的键保持 nil。
 type fileConfig struct {
-	Addr        *string       `json:"addr"`
-	Port        *int          `json:"port"`
-	Data        *string       `json:"data"`
-	BaseURL     *string       `json:"base_url"`
-	JWTSecret   *string       `json:"jwt_secret"`
-	StaticDir   *string       `json:"static_dir"`
-	OpenBrowser *bool         `json:"open_browser"`
-	TrustedProxies *string    `json:"trusted_proxies"`
-	Settings    *FileSettings `json:"settings"`
+	Addr           *string       `json:"addr"`
+	Port           *int          `json:"port"`
+	Data           *string       `json:"data"`
+	BaseURL        *string       `json:"base_url"`
+	JWTSecret      *string       `json:"jwt_secret"`
+	StaticDir      *string       `json:"static_dir"`
+	OpenBrowser    *bool         `json:"open_browser"`
+	TrustedProxies *string       `json:"trusted_proxies"`
+	Settings       *FileSettings `json:"settings"`
 }
 
 // Config 是一次进程启动所需的全部配置。
@@ -70,7 +73,7 @@ type Config struct {
 
 	// TrustedProxiesRaw 是可信代理网段（CIDR 或单 IP，逗号分隔）；空表示直连部署、
 	// 完全不信任 X-Forwarded-*。ParsedTrustedProxies 在 Validate 后可用。
-	TrustedProxiesRaw   string
+	TrustedProxiesRaw    string
 	parsedTrustedProxies []*net.IPNet
 }
 
@@ -172,16 +175,16 @@ func Load(args []string, errOut io.Writer) (*Config, error) {
 	}
 
 	cfg := &Config{
-		Addr:        pick("addr", *addr, "PIXSY_ADDR", fc.Addr, defaultAddr),
-		DataDir:     dataDir,
-		BaseURL:     strings.TrimRight(pick("base-url", *baseURL, "PIXSY_BASE_URL", fc.BaseURL, ""), "/"),
-		MaxUploadMB: pickInt("max-upload-mb", *maxMB, "PIXSY_MAX_UPLOAD_MB", nil, defaultMaxUploadMB),
-		JWTSecret:   pick("jwt-secret", *jwtSecret, "PIXSY_JWT_SECRET", fc.JWTSecret, ""),
-		StaticDir:   pick("static-dir", *staticDir, "PIXSY_STATIC_DIR", fc.StaticDir, ""),
-		OpenBrowser: pickBool("open-browser", *openBrowser, "PIXSY_OPEN_BROWSER", fc.OpenBrowser, runtime.GOOS == "windows"),
-		ConfigFile:  loaded,
+		Addr:              pick("addr", *addr, "PIXSY_ADDR", fc.Addr, defaultAddr),
+		DataDir:           dataDir,
+		BaseURL:           strings.TrimRight(pick("base-url", *baseURL, "PIXSY_BASE_URL", fc.BaseURL, ""), "/"),
+		MaxUploadMB:       pickInt("max-upload-mb", *maxMB, "PIXSY_MAX_UPLOAD_MB", nil, defaultMaxUploadMB),
+		JWTSecret:         pick("jwt-secret", *jwtSecret, "PIXSY_JWT_SECRET", fc.JWTSecret, ""),
+		StaticDir:         pick("static-dir", *staticDir, "PIXSY_STATIC_DIR", fc.StaticDir, ""),
+		OpenBrowser:       pickBool("open-browser", *openBrowser, "PIXSY_OPEN_BROWSER", fc.OpenBrowser, runtime.GOOS == "windows"),
+		ConfigFile:        loaded,
 		TrustedProxiesRaw: pick("trusted-proxies", *trustedProxies, "PIXSY_TRUSTED_PROXIES", fc.TrustedProxies, ""),
-		Settings:    fc.Settings,
+		Settings:          fc.Settings,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -234,7 +237,7 @@ func (c *Config) Validate() error {
 	if c.BaseURL != "" && !strings.HasPrefix(c.BaseURL, "http://") && !strings.HasPrefix(c.BaseURL, "https://") {
 		return errors.New("base-url 必须以 http:// 或 https:// 开头")
 	}
-	nets, err := parseCIDRs(c.TrustedProxiesRaw)
+	nets, err := ParseCIDRs(c.TrustedProxiesRaw)
 	if err != nil {
 		return fmt.Errorf("trusted-proxies: %w", err)
 	}
@@ -242,8 +245,9 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// parseCIDRs 解析逗号分隔的 CIDR/单 IP 列表；单 IP 视为 /32 或 /128。
-func parseCIDRs(raw string) ([]*net.IPNet, error) {
+// ParseCIDRs 解析逗号分隔的 CIDR/单 IP 列表；单 IP 视为 /32 或 /128。
+// 供本包与 setting 包（外链 IP 白名单）复用。
+func ParseCIDRs(raw string) ([]*net.IPNet, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, nil

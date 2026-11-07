@@ -198,8 +198,18 @@ After logging in with the admin account, a **Admin panel** entry appears in the 
 | Allow uploads | On | The site-wide upload master switch — a one-click emergency stop |
 | Max image size (MB) | 20 | Largest single file allowed (1–1024) |
 | Max batch size | 10 | Most files selectable in one go (1–50) |
+| Hotlink IP whitelist | Empty | **Anti-hotlinking**: visitor IPs or CIDR ranges (e.g. `203.0.113.7`, `192.168.1.0/24`, one per line); only these networks can load image links, everyone else gets an empty response |
+| Hotlink referer whitelist | Empty | **Anti-hotlinking**: site domains allowed to embed your images (e.g. `example.com`, one per line, subdomains included); images embedded on those sites are visible to all of their visitors |
 
 Click **Save settings** and changes take effect **immediately — no restart needed**.
+
+**About the two hotlink whitelists**:
+
+- Leave both empty = detection disabled, exactly the old behavior; filling either one enables it, and **matching either whitelist grants access**.
+- The **IP whitelist** controls *which networks' visitors* can see the images — embedded `<img>` tags make the **visitor's browser** fetch the image directly, so it's the **visitor's IP** that matters, not the embedding site's server IP. Best for "only my office/home network may view".
+- The **referer whitelist** controls *which sites may embed* — with `example.com` listed, images on its pages are visible to all its visitors; embeds from other sites render blank. Opening the image URL directly, RSS/Markdown readers and other no-referrer contexts are unaffected.
+- **Logged-in admins are never restricted** by the whitelists — no need to add your own IP.
+- Two caveats: ① Referer can be forged by bad actors; the domain whitelist stops casual leeching, it is not strict access control. ② If your image links sit behind a CDN, cache hits bypass the origin whitelist entirely — disable CDN caching on image paths or configure equivalent IP rules at the CDN when the whitelists are enabled.
 
 ### 5.2 Behavior worth knowing
 
@@ -311,7 +321,9 @@ Full `pixsy.json` example:
     "allow_register": true,
     "allow_upload": true,
     "max_upload_mb": 20,
-    "max_batch": 10
+    "max_batch": 10,
+    "hotlink_whitelist": "",
+    "hotlink_referers": ""
   }
 }
 ```

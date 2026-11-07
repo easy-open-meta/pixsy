@@ -9,21 +9,22 @@ import {
   startLskyMigration,
   updateSettings,
 } from '../api/admin'
-import type { LskyMigrationStatus } from '../api/admin'
+import type { AdminSettings, LskyMigrationStatus } from '../api/admin'
 import { errorMessage } from '../api/client'
-import type { SiteConfig } from '../api/config'
 import { useConfigStore } from '../stores/config'
 import { useToastStore } from '../stores/toast'
 
 const configStore = useConfigStore()
 const toast = useToastStore()
 
-const form = reactive<SiteConfig>({
+const form = reactive<AdminSettings>({
   site_name: '',
   allow_register: false,
   allow_upload: false,
   max_upload_mb: 10,
   max_batch: 5,
+  hotlink_whitelist: '',
+  hotlink_referers: '',
 })
 
 const loading = ref(true)
@@ -80,6 +81,14 @@ onMounted(async () => {
 
 onUnmounted(stopPolling)
 
+/** 把逗号/换行分隔的白名单输入拆成非空条目。 */
+function splitList(raw: string): string[] {
+  return raw
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 function validate(): string {
   if (!form.site_name.trim()) return '站点名称不能为空'
   // v-model.number 在输入框被清空时可能得到非数字值，这里统一兜底校验
@@ -88,6 +97,16 @@ function validate(): string {
   }
   if (!Number.isFinite(form.max_batch) || form.max_batch < 1) {
     return '单批上传数量需为不小于 1 的数字'
+  }
+  const ips = splitList(form.hotlink_whitelist)
+  if (ips.length > 64) return 'IP 白名单不能超过 64 条'
+  const domains = splitList(form.hotlink_referers)
+  if (domains.length > 64) return '引用域名白名单不能超过 64 条'
+  for (const d of domains) {
+    // 只做格式预检，合法性与 CIDR 解析由后端校验并回显具体条目
+    if (!/^[a-z0-9.-]+$/i.test(d) || d.startsWith('.') || d.endsWith('.') || d.includes('..')) {
+      return `引用域名「${d}」格式无效（只填域名本身，不带 https:// 与路径）`
+    }
   }
   return ''
 }
@@ -103,6 +122,8 @@ async function submit(): Promise<void> {
       allow_upload: form.allow_upload,
       max_upload_mb: form.max_upload_mb,
       max_batch: form.max_batch,
+      hotlink_whitelist: splitList(form.hotlink_whitelist).join(','),
+      hotlink_referers: splitList(form.hotlink_referers).join(','),
     })
     Object.assign(form, saved)
     await configStore.load() // 站名等配置即刻反映到页面头部
@@ -207,6 +228,32 @@ async function downloadMapping(): Promise<void> {
             type="number"
             min="1"
           />
+        </div>
+        <div class="field">
+          <label for="set-hotlink-ip">外链 IP 白名单（防盗链）</label>
+          <textarea
+            id="set-hotlink-ip"
+            v-model="form.hotlink_whitelist"
+            class="input"
+            rows="3"
+            placeholder="每行一个 IP 或网段，如 203.0.113.7、192.168.1.0/24"
+          ></textarea>
+          <p class="small muted">
+            留空不启用。命中任一白名单（IP 或下方引用域名）即可访问图片外链，其余请求返回空内容；管理员登录后不受限制，无需添加自己的 IP。
+          </p>
+        </div>
+        <div class="field">
+          <label for="set-hotlink-referer">外链引用域名白名单（防盗链）</label>
+          <textarea
+            id="set-hotlink-referer"
+            v-model="form.hotlink_referers"
+            class="input"
+            rows="3"
+            placeholder="每行一个域名，如 example.com（子域名自动放行）"
+          ></textarea>
+          <p class="small muted">
+            允许嵌图的站点域名：填入后，这些站点页面里的外链图片对它的所有访客可见。留空不启用；启用后直接打开图片地址等无来源页面的请求不受影响。Referer 可被伪造，此项用于阻止盗链而非严格访问控制。
+          </p>
         </div>
         <button class="btn btn-primary" type="submit" :disabled="submitting">
           {{ submitting ? '保存中…' : '保存设置' }}

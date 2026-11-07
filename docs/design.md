@@ -238,6 +238,27 @@ GIF 防御性限制：解码头获取尺寸即可，**不整帧解码动图**，
 5. **缩略图**：`/t/{hash}.jpg` 供第三方小图/预览场景，体积降低一个数量级。
 6. **传输层**：反代（Caddy/Nginx）启用 HTTP/2，拥塞丢包网络下单连接多路复用 + 头部压缩显著降低多图加载时间（见 §6.4）。
 7. **服务本身轻**：Go 静态文件直出（走 sendfile），常驻内存 ~20MB，低配机器无 GC 压力瓶颈。
+8. **外链访问控制（防盗链，可选）**：后台设置两张白名单，**都为空时不做任何检测**（升级完全兼容）；guard 只包裹 `/i/`、`/t/`，`/api` 与 SPA 不受影响：
+   - `hotlink_whitelist`：访客 IP/CIDR 网段——控制"**哪些网络能取图**"。注意 `<img>` 嵌图是访客浏览器直连源站，命中的是**访客的 IP** 而非引用站点的服务器 IP（反代部署需配 `trusted-proxies` 才能取到真实访客 IP）。
+   - `hotlink_referers`：允许引用的站点域名——控制"**哪些网站能嵌图**"。填入 `example.com` 后，该站点页面里的外链图片对它的**所有访客**可见（子域名自动放行；`evil-example.com` 不会误命中；Referer 取 http/https scheme 的 host，去端口、小写匹配）。
+
+   放行公式（按序判定，任一命中即放行）：
+
+   ```text
+   放行 ⇔ 两表全空
+        ∨ ClientIP ∈ IP表
+        ∨ (域名表启用 ∧ 无有效 Referer)          ← 空 Referer 策略，只作用于域名机制
+        ∨ (域名表启用 ∧ Referer 域名命中)
+        ∨ 管理员 Cookie 有效                     ← 登录时下发的 JWT（HttpOnly+SameSite=Lax）
+   ```
+
+   未命中返回 **200 空响应体 + `Cache-Control: no-store`**：不向引用方暴露拦截行为，同时防止空响应被 CDN/浏览器按缓存规则存储造成毒化。
+
+   注意事项：
+   - 空 Referer（地址栏直开、RSS/Markdown 阅读器、隐私设置等）只在域名表启用时放行；仅启用 IP 表时仍按 IP 严格判定。
+   - Referer 可被非浏览器客户端伪造，域名白名单定位是"防白嫖"而非严格访问控制。
+   - 管理员登录后访问不受白名单限制（Cookie 放行），无需把自己的 IP 入表；角色取自 JWT claims 不查库，角色变更在 token 过期（7 天）后生效。
+   - CDN 命中 immutable 缓存后不再回源，会绕过源站白名单——启用白名单时需关闭 `/i/`、`/t/` 的 CDN 缓存，或在 CDN 层配置等价 IP 规则。
 
 ### 3.6 权限模型（R5）
 
@@ -260,6 +281,8 @@ GIF 防御性限制：解码头获取尺寸即可，**不整帧解码动图**，
 | `allow_upload` | `true` | 是否允许普通用户上传（admin 不受限） |
 | `max_upload_mb` | `20`（首次启动取 `PIXSY_MAX_UPLOAD_MB` 种子值） | 单文件上限，范围 1~1024 |
 | `max_batch` | `10` | 单次批量上传文件数上限 |
+| `hotlink_whitelist` | 空 | 外链 IP/CIDR 白名单（访客网段，逗号分隔）；空=不启用检测（§3.5） |
+| `hotlink_referers` | 空 | 外链引用域名白名单（允许嵌图的站点，逗号分隔）；空=不启用检测（§3.5） |
 
 `PUT /api/v1/admin/settings` 请求体：`{"allow_register":false,"allow_upload":true,"max_upload_mb":20,"site_name":"pixsy"}`。**开关修改即时生效**，无需重启。
 

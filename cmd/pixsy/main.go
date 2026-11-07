@@ -81,20 +81,24 @@ func run(args []string, logger *slog.Logger) error {
 	}
 
 	apiSrv := api.New(api.Options{
-		DB:       db,
-		Settings: settings,
-		Store:    store,
-		Auth:     mgr,
-		BaseURL:  cfg.BaseURL,
+		DB:             db,
+		Settings:       settings,
+		Store:          store,
+		Auth:           mgr,
+		BaseURL:        cfg.BaseURL,
+		TrustedProxies: cfg.ParsedTrustedProxies(),
 	})
 
 	srv := server.New(server.Options{
-		API:       apiSrv.Handler(),
-		Store:     store,
-		DB:        db,
-		Static:    web.Dist(),
-		StaticDir: cfg.StaticDir,
-		Logger:    logger,
+		API:            apiSrv.Handler(),
+		Store:          store,
+		DB:             db,
+		Static:         web.Dist(),
+		StaticDir:      cfg.StaticDir,
+		Logger:         logger,
+		Settings:       settings,
+		Auth:           mgr,
+		TrustedProxies: cfg.ParsedTrustedProxies(),
 	})
 
 	// 先同步监听，确认端口可用再启动服务，也保证开浏览器时页面已能访问。

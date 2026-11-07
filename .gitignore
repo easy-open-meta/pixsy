@@ -41,3 +41,4 @@ deploy/*.zip
 
 # 本地 git worktree
 .worktree-arranger/
+.zcode/

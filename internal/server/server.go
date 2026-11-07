@@ -6,46 +6,59 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/pixsy/pixsy/internal/auth"
 	"github.com/pixsy/pixsy/internal/model"
+	"github.com/pixsy/pixsy/internal/setting"
 	"github.com/pixsy/pixsy/internal/storage"
 )
 
 // Options 是构建根处理器所需的依赖。
 type Options struct {
-	API       http.Handler // /api/v1 处理器
-	Store     *storage.Store
-	DB        *sql.DB // 旧路径别名查询（可为 nil）
-	Static    fs.FS   // 内嵌前端产物（以 dist 为根）
-	StaticDir string  // 非空时从磁盘读取前端产物（开发热更新）
-	Logger    *slog.Logger
+	API            http.Handler // /api/v1 处理器
+	Store          *storage.Store
+	DB             *sql.DB // 旧路径别名查询（可为 nil）
+	Static         fs.FS   // 内嵌前端产物（以 dist 为根）
+	StaticDir      string  // 非空时从磁盘读取前端产物（开发热更新）
+	Logger         *slog.Logger
+	Settings       *setting.Store // 外链白名单设置（nil 视为功能未启用）
+	Auth           *auth.Manager  // 管理员 Cookie 校验（nil 时跳过管理员放行分支）
+	TrustedProxies []*net.IPNet   // 可信代理网段；空表示直连部署，忽略 X-Forwarded-*
 }
 
 // Server 持有路由所需的依赖。
 type Server struct {
-	api       http.Handler
-	store     *storage.Store
-	db        *sql.DB
-	static    fs.FS
-	staticDir string
-	logger    *slog.Logger
-	mux       *http.ServeMux
+	api            http.Handler
+	store          *storage.Store
+	db             *sql.DB
+	static         fs.FS
+	staticDir      string
+	logger         *slog.Logger
+	mux            *http.ServeMux
+	settings       *setting.Store
+	auth           *auth.Manager
+	trustedProxies []*net.IPNet
 }
 
 // New 创建服务；Static 可为 nil（此时只提供 API 与图片）。
 func New(opts Options) *Server {
 	s := &Server{
-		api:       opts.API,
-		store:     opts.Store,
-		db:        opts.DB,
-		static:    opts.Static,
-		staticDir: opts.StaticDir,
-		logger:    opts.Logger,
+		api:            opts.API,
+		store:          opts.Store,
+		db:             opts.DB,
+		static:         opts.Static,
+		staticDir:      opts.StaticDir,
+		logger:         opts.Logger,
+		settings:       opts.Settings,
+		auth:           opts.Auth,
+		trustedProxies: opts.TrustedProxies,
 	}
 	if s.logger == nil {
 		s.logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
@@ -54,8 +67,9 @@ func New(opts Options) *Server {
 	mux := http.NewServeMux()
 	mux.Handle("/api/v1/", s.api)
 	// 路径通配：既支持 /i/<hash>.<ext>，也支持 Lsky 风格的 /i/2025/06/20/x.png 旧链接。
-	mux.HandleFunc("GET /i/{path...}", s.serveOriginal)
-	mux.HandleFunc("GET /t/{name}", s.serveThumb)
+	// 两条图片直出路由包一层外链防盗链 guard（§3.5）。
+	mux.Handle("GET /i/{path...}", s.hotlinkGuard(http.HandlerFunc(s.serveOriginal)))
+	mux.Handle("GET /t/{name}", s.hotlinkGuard(http.HandlerFunc(s.serveThumb)))
 	mux.HandleFunc("/", s.serveStatic)
 	s.mux = mux
 	return s
@@ -63,6 +77,101 @@ func New(opts Options) *Server {
 
 // Handler 返回带安全响应头与请求日志的根处理器。
 func (s *Server) Handler() http.Handler { return s.securityHeaders(s.logRequests(s.mux)) }
+
+// ---------------------------------------------------------------- 外链访问控制
+
+// hotlinkGuard 实现外链防盗链（§3.5）：两个白名单（访客 IP/网段、引用站点
+// 域名）都为空时不做任何检测，行为与未加 guard 完全一致；启用后按序判定：
+//
+//	ClientIP 在 IP 白名单内 → 放行；
+//	域名白名单启用且无有效 Referer → 放行（空 Referer 策略，只作用于域名机制，
+//	不影响 IP 白名单的拦截）；
+//	域名白名单启用且 Referer 域名命中 → 放行；
+//	管理员 Cookie（登录时下发的 JWT）有效 → 放行，管理员无需把自己的 IP 入白名单；
+//	其余 → 200 空响应体，不暴露拦截行为。
+func (s *Server) hotlinkGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.hotlinkAllowed(r) {
+			// security: no-store 必不可少——若空响应被 CDN/浏览器按缓存规则
+			// 存储，后续放行的正常请求会命中被污染的缓存条目。
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hotlinkAllowed 按放行公式判定单个请求，任何一步命中即放行。
+func (s *Server) hotlinkAllowed(r *http.Request) bool {
+	if s.settings == nil {
+		return true
+	}
+	rules := s.settings.HotlinkRules()
+	if len(rules.Nets) == 0 && len(rules.Domains) == 0 {
+		return true // 两个白名单都为空：检测未启用
+	}
+	if len(rules.Nets) > 0 && ipInNets(auth.ClientIP(r, s.trustedProxies), rules.Nets) {
+		return true
+	}
+	if len(rules.Domains) > 0 {
+		host, ok := refererHost(r)
+		// 无有效来源（空 Referer/解析失败/非 http(s) scheme）按空 Referer 策略放行。
+		if !ok || domainAllowed(host, rules.Domains) {
+			return true
+		}
+	}
+	if s.auth != nil {
+		if c, err := r.Cookie(auth.AdminCookieName); err == nil {
+			// 角色取自 JWT claims 不查库：角色变更在 token 过期后生效，
+			// 对图片访问这一读路径可接受（§3.2）。
+			if claims, err := s.auth.Parse(c.Value); err == nil && claims.Role == model.RoleAdmin {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ipInNets 报告点分 IP 字符串是否落在任一网段内（auth.ipInNets 的本地形态）。
+func ipInNets(ip string, nets []*net.IPNet) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, n := range nets {
+		if n.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+// refererHost 提取 Referer 的来源主机名（小写、去端口）。仅采信 http/https
+// scheme；空、解析失败、app 扩展等其他 scheme 返回 ok=false，视为无有效来源。
+func refererHost(r *http.Request) (host string, ok bool) {
+	ref := r.Referer()
+	if ref == "" {
+		return "", false
+	}
+	u, err := url.Parse(ref)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", false
+	}
+	host = strings.ToLower(u.Hostname())
+	return host, host != ""
+}
+
+// domainAllowed 按域名白名单匹配来源 host：精确相等或为其子域
+// （img.example.com 命中 example.com，evil-example.com 不会误命中）。
+func domainAllowed(host string, domains []string) bool {
+	for _, d := range domains {
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
+}
 
 // securityHeaders 为所有响应补齐基础安全头（§3.5）。
 // security: 前端 SPA 无内联脚本，可上严格 CSP；frame-ancestors 'none'

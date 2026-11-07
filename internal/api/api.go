@@ -102,7 +102,8 @@ func (s *Server) Handler() http.Handler {
 // ---------------------------------------------------------------- 公开配置
 
 func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) {
-	httpx.Data(w, http.StatusOK, s.settings.Get())
+	// 公开接口：白名单属于访问控制信息，走 Public() 视图剔除后再序列化（§3.3）。
+	httpx.Data(w, http.StatusOK, s.settings.Get().Public())
 }
 
 // ---------------------------------------------------------------- 认证
@@ -163,7 +164,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusForbidden, "注册已关闭")
 		return
 	}
-
 
 	u, err := model.CreateUserTx(ctx, tx, name, pwHash, role)
 	if err != nil {
@@ -232,7 +232,30 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusInternalServerError, "签发令牌失败")
 		return
 	}
+	s.setAdminCookie(w, r, token)
 	httpx.Data(w, http.StatusOK, map[string]any{"token": token, "user": u})
+}
+
+// setAdminCookie 登录成功时下发管理员会话 Cookie（值即 JWT，§3.5）：
+// 图片直出路由（/i/、/t/）靠它识别管理员并放行外链白名单。
+// HttpOnly + SameSite=Lax：JS 不可读；第三方站点嵌图时浏览器不携带该
+// Cookie，管理员凭证不会混入外链请求。无服务端注销接口，Cookie 随
+// token 同期（TokenTTL）自然过期。
+func (s *Server) setAdminCookie(w http.ResponseWriter, r *http.Request, token string) {
+	// security: Secure 只在确定走 HTTPS 时设置（直连 TLS，或可信代理声明的
+	// X-Forwarded-Proto）——直连 HTTP 部署误设会让浏览器丢弃 Cookie，
+	// 管理员图库预览静默失效。
+	secure := r.TLS != nil ||
+		(auth.RemoteAddrInNets(r, s.trustedProxies) && r.Header.Get("X-Forwarded-Proto") == "https")
+	http.SetCookie(w, &http.Cookie{
+		Name:     auth.AdminCookieName,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   int(auth.TokenTTL.Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   secure,
+	})
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {

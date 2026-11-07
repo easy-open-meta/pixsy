@@ -1,14 +1,20 @@
 import { ApiError, getToken, request, toApiError } from './client'
 import type { SiteConfig } from './config'
 
-export type SettingsPatch = Partial<SiteConfig>
-
-export function getSettings(): Promise<SiteConfig> {
-  return request<SiteConfig>('GET', '/admin/settings')
+/** 后台设置：在公开配置基础上追加两个外链白名单（公开接口不返回这两项，§3.3）。 */
+export type AdminSettings = SiteConfig & {
+  hotlink_whitelist: string
+  hotlink_referers: string
 }
 
-export function updateSettings(patch: SettingsPatch): Promise<SiteConfig> {
-  return request<SiteConfig>('PUT', '/admin/settings', patch)
+export type SettingsPatch = Partial<AdminSettings>
+
+export function getSettings(): Promise<AdminSettings> {
+  return request<AdminSettings>('GET', '/admin/settings')
+}
+
+export function updateSettings(patch: SettingsPatch): Promise<AdminSettings> {
+  return request<AdminSettings>('PUT', '/admin/settings', patch)
 }
 
 // ---------------------------------------------------------------- Lsky 迁移

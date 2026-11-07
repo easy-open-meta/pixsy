@@ -34,6 +34,11 @@ const (
 	// tokenIssuer / tokenAudience 绑定 JWT 的签发方与受众，防跨服务混用密钥。
 	tokenIssuer   = "pixsy"
 	tokenAudience = "pixsy-api"
+
+	// AdminCookieName 是登录成功时下发的管理员会话 Cookie（值即 JWT）。
+	// 图片直出路由用它识别管理员、放行外链白名单（§3.5）——<img> 加载带不上
+	// Authorization 头，只能借助浏览器自动携带的 Cookie。
+	AdminCookieName = "pixsy_admin"
 )
 
 // ErrInvalidToken is returned by Parse for any unusable token.

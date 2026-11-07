@@ -2,6 +2,7 @@ package config
 
 import (
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -229,5 +230,29 @@ func TestLoadRejectsEmptyDataFlag(t *testing.T) {
 	}
 	if _, err := Load([]string{}, io.Discard); err != nil {
 		t.Fatalf("Load(default) failed: %v", err)
+	}
+}
+
+// ParseCIDRs 同时接受单 IP（视为 /32、/128）与 CIDR 网段；trusted-proxies
+// 与 setting 包的外链 IP 白名单共用此解析。
+func TestParseCIDRs(t *testing.T) {
+	nets, err := ParseCIDRs("10.0.0.1, 192.168.1.0/24")
+	if err != nil {
+		t.Fatalf("ParseCIDRs: %v", err)
+	}
+	if len(nets) != 2 {
+		t.Fatalf("应解析出 2 个网段, got %d", len(nets))
+	}
+	if !nets[0].Contains(net.ParseIP("10.0.0.1")) || nets[0].Contains(net.ParseIP("10.0.0.2")) {
+		t.Fatalf("单 IP 应视为 /32: %v", nets[0])
+	}
+	if !nets[1].Contains(net.ParseIP("192.168.1.77")) || nets[1].Contains(net.ParseIP("192.168.2.1")) {
+		t.Fatalf("CIDR 未生效: %v", nets[1])
+	}
+	if _, err := ParseCIDRs("bad-ip"); err == nil {
+		t.Fatal("非法条目应报错")
+	}
+	if nets, err := ParseCIDRs(""); err != nil || nets != nil {
+		t.Fatalf("空串应返回 nil: %v %v", nets, err)
 	}
 }
