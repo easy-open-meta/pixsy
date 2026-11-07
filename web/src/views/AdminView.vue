@@ -25,6 +25,7 @@ const form = reactive<AdminSettings>({
   max_batch: 5,
   hotlink_whitelist: '',
   hotlink_referers: '',
+  hotlink_embed_only: false,
 })
 
 const loading = ref(true)
@@ -124,6 +125,7 @@ async function submit(): Promise<void> {
       max_batch: form.max_batch,
       hotlink_whitelist: splitList(form.hotlink_whitelist).join(','),
       hotlink_referers: splitList(form.hotlink_referers).join(','),
+      hotlink_embed_only: form.hotlink_embed_only,
     })
     Object.assign(form, saved)
     await configStore.load() // 站名等配置即刻反映到页面头部
@@ -239,7 +241,7 @@ async function downloadMapping(): Promise<void> {
             placeholder="每行一个 IP 或网段，如 203.0.113.7、192.168.1.0/24"
           ></textarea>
           <p class="small muted">
-            留空不启用。命中任一白名单（IP 或下方引用域名）即可访问图片外链，其余请求返回空内容；管理员登录后不受限制，无需添加自己的 IP。
+            留空不启用。命中任一白名单（IP 或下方引用域名）即可访问图片外链，其余请求返回空内容；登录用户访问不受限制，无需添加自己的 IP。
           </p>
         </div>
         <div class="field">
@@ -255,6 +257,14 @@ async function downloadMapping(): Promise<void> {
             允许嵌图的站点域名：填入后，这些站点页面里的外链图片对它的所有访客可见。留空不启用；启用后直接打开图片地址等无来源页面的请求不受影响。Referer 可被伪造，此项用于阻止盗链而非严格访问控制。
           </p>
         </div>
+        <label class="check-row">
+          <input v-model="form.hotlink_embed_only" type="checkbox" />
+          <span>仅允许嵌图加载（防 F12 新标签页打开）</span>
+        </label>
+        <p class="small muted">
+          开启后，浏览器以独立页面方式打开图片（开发者工具「在新标签页打开」、地址栏直开、iframe 嵌入）一律返回空内容，只有网页里的图片元素可正常加载；RSS
+          阅读器、老浏览器等不上报 Sec-Fetch 头的客户端不受影响。登录用户（含图库「打开原图」）不受影响。
+        </p>
         <button class="btn btn-primary" type="submit" :disabled="submitting">
           {{ submitting ? '保存中…' : '保存设置' }}
         </button>

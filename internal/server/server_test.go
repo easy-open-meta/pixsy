@@ -114,6 +114,20 @@ func withXFF(v string) mod {
 
 func withCookie(c *http.Cookie) mod { return func(r *http.Request) { r.AddCookie(c) } }
 
+func withDest(v string) mod {
+	return func(r *http.Request) { r.Header.Set("Sec-Fetch-Dest", v) }
+}
+
+// setEmbedOnly 切换仅嵌图模式（hotlink_embed_only）。
+func (e *hotlinkEnv) setEmbedOnly(t *testing.T, on bool) {
+	t.Helper()
+	if _, err := e.settings.Update(context.Background(), setting.Patch{
+		HotlinkEmbedOnly: &on,
+	}); err != nil {
+		t.Fatalf("update embed only: %v", err)
+	}
+}
+
 // get 发送图片直出请求，返回状态码、响应体与 Cache-Control。
 func (e *hotlinkEnv) get(t *testing.T, path string, mods ...mod) (int, []byte, string) {
 	t.Helper()
@@ -151,7 +165,7 @@ func (e *hotlinkEnv) postJSON(t *testing.T, path string, payload any) (*http.Res
 	return res, body
 }
 
-// loginCookie 注册并登录，返回登录响应下发的管理员会话 Cookie。
+// loginCookie 注册并登录，返回登录响应下发的会话 Cookie（任何角色）。
 func (e *hotlinkEnv) loginCookie(t *testing.T, username string) *http.Cookie {
 	t.Helper()
 	if res, body := e.postJSON(t, "/api/v1/auth/register", map[string]any{
@@ -166,11 +180,11 @@ func (e *hotlinkEnv) loginCookie(t *testing.T, username string) *http.Cookie {
 		t.Fatalf("login %s: %d %s", username, res.StatusCode, body)
 	}
 	for _, c := range res.Cookies() {
-		if c.Name == auth.AdminCookieName {
+		if c.Name == auth.SessionCookieName {
 			return c
 		}
 	}
-	t.Fatalf("login 未下发 %s Cookie: %v", auth.AdminCookieName, res.Cookies())
+	t.Fatalf("login 未下发 %s Cookie: %v", auth.SessionCookieName, res.Cookies())
 	return nil
 }
 
@@ -265,15 +279,15 @@ func TestHotlinkRefererWhitelistOnly(t *testing.T) {
 	}
 }
 
-// 两表同启用：任一命中放行，全不命中拦截；管理员 Cookie 兜底，普通用户与伪造 Cookie 不放行。
-func TestHotlinkBothListsAndAdminBypass(t *testing.T) {
+// 两表同启用：任一命中放行，全不命中拦截；登录会话 Cookie（含普通用户）兜底，伪造 Cookie 不放行。
+func TestHotlinkBothListsAndSessionBypass(t *testing.T) {
 	e := newHotlinkEnv(t, "")
 	orig, _ := e.seedImage(t)
 	e.setWhitelist(t, "203.0.113.7", "example.com")
 
 	admin := e.loginCookie(t, "rootadmin") // 首个注册用户即管理员
 	user := e.loginCookie(t, "plainuser")  // 第二个用户为普通用户
-	fake := &http.Cookie{Name: auth.AdminCookieName, Value: "forged-token"}
+	fake := &http.Cookie{Name: auth.SessionCookieName, Value: "forged-token"}
 
 	cases := []struct {
 		name    string
@@ -284,7 +298,7 @@ func TestHotlinkBothListsAndAdminBypass(t *testing.T) {
 		{"IP 不命中 Referer 命中放行", []mod{fromIP("192.0.2.1:2"), withReferer("https://example.com/")}, false},
 		{"全不命中拦截", []mod{fromIP("192.0.2.1:2"), withReferer("https://other.com/")}, true},
 		{"管理员 Cookie 放行", []mod{fromIP("192.0.2.1:2"), withReferer("https://other.com/"), withCookie(admin)}, false},
-		{"普通用户 Cookie 不放行", []mod{fromIP("192.0.2.1:2"), withReferer("https://other.com/"), withCookie(user)}, true},
+		{"普通用户 Cookie 放行", []mod{fromIP("192.0.2.1:2"), withReferer("https://other.com/"), withCookie(user)}, false},
 		{"伪造 Cookie 不放行", []mod{fromIP("192.0.2.1:2"), withReferer("https://other.com/"), withCookie(fake)}, true},
 	}
 	for _, tc := range cases {
@@ -295,6 +309,92 @@ func TestHotlinkBothListsAndAdminBypass(t *testing.T) {
 		if (len(body) == 0) != tc.blocked {
 			t.Fatalf("%s: bytes=%d, blocked=%v", tc.name, len(body), tc.blocked)
 		}
+	}
+}
+
+// 仅嵌图模式（无白名单）：文档级导航一律拦截，嵌图加载不受影响；
+// 不发 Sec-Fetch-Dest 的老客户端/阅读器按原逻辑放行。
+func TestHotlinkEmbedOnlyWithoutWhitelists(t *testing.T) {
+	e := newHotlinkEnv(t, "")
+	orig, _ := e.seedImage(t)
+	e.setWhitelist(t, "", "")
+	e.setEmbedOnly(t, true)
+
+	cases := []struct {
+		name    string
+		mods    []mod
+		blocked bool
+	}{
+		{"嵌图加载放行", []mod{withDest("image")}, false},
+		{"无 Sec-Fetch 头放行", nil, false},
+		{"新标签页文档导航拦截", []mod{withDest("document")}, true},
+		{"iframe 导航拦截", []mod{withDest("iframe")}, true},
+	}
+	for _, tc := range cases {
+		code, body, cc := e.get(t, orig, tc.mods...)
+		if code != http.StatusOK {
+			t.Fatalf("%s: status=%d", tc.name, code)
+		}
+		if (len(body) == 0) != tc.blocked {
+			t.Fatalf("%s: bytes=%d, blocked=%v", tc.name, len(body), tc.blocked)
+		}
+		if tc.blocked && cc != "no-store" {
+			t.Fatalf("%s: 拦截响应应 no-store, got %q", tc.name, cc)
+		}
+	}
+}
+
+// 仅嵌图模式与白名单组合：Referer 命中不能授权文档级导航（否则从白名单站点
+// 「在新标签页打开图片」即可绕过）；IP 白名单与登录会话 Cookie 可以放行文档导航。
+func TestHotlinkEmbedOnlyWithWhitelists(t *testing.T) {
+	e := newHotlinkEnv(t, "")
+	orig, _ := e.seedImage(t)
+	e.setWhitelist(t, "203.0.113.7", "example.com")
+	e.setEmbedOnly(t, true)
+
+	admin := e.loginCookie(t, "rootadmin")
+	user := e.loginCookie(t, "plainuser") // 普通用户：图库「打开原图」依赖此放行
+
+	cases := []struct {
+		name    string
+		mods    []mod
+		blocked bool
+	}{
+		{"嵌图+白名单 Referer 放行", []mod{withDest("image"), withReferer("https://example.com/")}, false},
+		{"嵌图+空 Referer 放行", []mod{withDest("image")}, false},
+		{"嵌图+其他站 Referer 拦截", []mod{withDest("image"), withReferer("https://other.com/")}, true},
+		{"文档导航+白名单 Referer 仍拦截", []mod{withDest("document"), withReferer("https://example.com/")}, true},
+		{"文档导航+空 Referer 拦截", []mod{withDest("document")}, true},
+		{"文档导航+IP 白名单放行", []mod{withDest("document"), fromIP("203.0.113.7:2"), withReferer("https://other.com/")}, false},
+		{"文档导航+管理员 Cookie 放行", []mod{withDest("document"), withReferer("https://other.com/"), withCookie(admin)}, false},
+		{"文档导航+普通用户 Cookie 放行", []mod{withDest("document"), withReferer("https://other.com/"), withCookie(user)}, false},
+	}
+	for _, tc := range cases {
+		code, body, _ := e.get(t, orig, tc.mods...)
+		if code != http.StatusOK {
+			t.Fatalf("%s: status=%d", tc.name, code)
+		}
+		if (len(body) == 0) != tc.blocked {
+			t.Fatalf("%s: bytes=%d, blocked=%v", tc.name, len(body), tc.blocked)
+		}
+	}
+}
+
+// 仅嵌图关闭时行为与之前完全一致：文档导航按 Referer/空 Referer 语义判定。
+func TestHotlinkEmbedOnlyOffKeepsLegacyBehavior(t *testing.T) {
+	e := newHotlinkEnv(t, "")
+	orig, _ := e.seedImage(t)
+	e.setWhitelist(t, "", "example.com")
+	e.setEmbedOnly(t, false)
+
+	if _, body, _ := e.get(t, orig, withDest("document"), withReferer("https://example.com/")); len(body) == 0 {
+		t.Fatal("关闭仅嵌图时白名单 Referer 应放行文档导航（原行为）")
+	}
+	if _, body, _ := e.get(t, orig, withDest("document")); len(body) == 0 {
+		t.Fatal("关闭仅嵌图时空 Referer 应放行（原行为）")
+	}
+	if _, body, _ := e.get(t, orig, withDest("document"), withReferer("https://other.com/")); len(body) != 0 {
+		t.Fatal("关闭仅嵌图时非白名单 Referer 应拦截（原行为）")
 	}
 }
 
@@ -312,8 +412,8 @@ func TestHotlinkXFFWithTrustedProxy(t *testing.T) {
 	}
 }
 
-// 登录响应下发的管理员 Cookie 属性：HttpOnly、SameSite=Lax、Max-Age=token TTL。
-func TestLoginSetsAdminCookieAttributes(t *testing.T) {
+// 登录响应下发的会话 Cookie 属性：HttpOnly、SameSite=Lax、Max-Age=token TTL。
+func TestLoginSetsSessionCookieAttributes(t *testing.T) {
 	e := newHotlinkEnv(t, "")
 	e.postJSON(t, "/api/v1/auth/register", map[string]any{
 		"username": "adminattr", "password": testPassword,
@@ -323,12 +423,12 @@ func TestLoginSetsAdminCookieAttributes(t *testing.T) {
 	})
 	var ck *http.Cookie
 	for _, c := range res.Cookies() {
-		if c.Name == auth.AdminCookieName {
+		if c.Name == auth.SessionCookieName {
 			ck = c
 		}
 	}
 	if ck == nil {
-		t.Fatal("登录应下发管理员 Cookie")
+		t.Fatal("登录应下发会话 Cookie")
 	}
 	if !ck.HttpOnly {
 		t.Fatal("Cookie 应为 HttpOnly")

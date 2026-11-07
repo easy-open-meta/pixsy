@@ -37,13 +37,14 @@ type FileSettings struct {
 	MaxBatch         *int    `json:"max_batch"`
 	HotlinkWhitelist *string `json:"hotlink_whitelist"`
 	HotlinkReferers  *string `json:"hotlink_referers"`
+	HotlinkEmbedOnly *bool   `json:"hotlink_embed_only"`
 }
 
 // HasValues 报告是否至少有一项覆盖。
 func (f *FileSettings) HasValues() bool {
 	return f != nil && (f.SiteName != nil || f.AllowRegister != nil ||
 		f.AllowUpload != nil || f.MaxUploadMB != nil || f.MaxBatch != nil ||
-		f.HotlinkWhitelist != nil || f.HotlinkReferers != nil)
+		f.HotlinkWhitelist != nil || f.HotlinkReferers != nil || f.HotlinkEmbedOnly != nil)
 }
 
 // fileConfig 是配置文件的反序列化结构；未出现的键保持 nil。

@@ -28,6 +28,7 @@ pixsy is a self-hosted image hosting service written in Go + Vue 3. The frontend
 - **Multiple link formats** — one-click copy as URL / Markdown / HTML / BBCode
 - **Users & permissions** — JWT authentication; the first registered user automatically becomes the admin; the login endpoint is rate-limited
 - **Online admin panel** — site name, open registration, open upload, per-file and per-batch limits; changes take effect immediately, no restart needed
+- **Optional hotlink protection** — visitor IP/CIDR and embedding-site domain whitelists plus an embedded-loads-only mode (blocks DevTools new-tab opens of images); non-whitelisted requests get an empty response, logged-in users are unaffected
 - **Direct image serving** — supports HTTP Range requests for correct browser and downloader behavior
 
 ## Requirements
@@ -164,6 +165,7 @@ Priority: **command-line flag > `PIXSY_*` environment variable > configuration f
 | `--jwt-secret` | `PIXSY_JWT_SECRET` | empty | JWT signing secret; if empty, one is generated and stored in the data directory |
 | `--static-dir` | `PIXSY_STATIC_DIR` | empty | Frontend static assets directory; empty uses the embedded build (for dev hot reload) |
 | `--open-browser` | `PIXSY_OPEN_BROWSER` | `true` on Windows, `false` elsewhere | Open the page in the default browser after startup; disable with `--open-browser=false` |
+| `--trusted-proxies` | `PIXSY_TRUSTED_PROXIES` | empty | Trusted reverse-proxy networks (CIDR, comma-separated); empty ignores `X-Forwarded-*` headers. Required behind a proxy/CDN so client IP (rate limiting, hotlink protection) resolves to the real visitor address |
 
 ### Configuration file (pixsy.json)
 
@@ -184,12 +186,16 @@ Full example:
   "base_url": "",
   "jwt_secret": "",
   "static_dir": "",
+  "trusted_proxies": "",
   "settings": {
     "site_name": "pixsy",
     "allow_register": true,
     "allow_upload": true,
     "max_upload_mb": 20,
-    "max_batch": 10
+    "max_batch": 10,
+    "hotlink_whitelist": "",
+    "hotlink_referers": "",
+    "hotlink_embed_only": false
   }
 }
 ```
@@ -203,6 +209,7 @@ Full example:
 | `jwt_secret` | JWT signing secret; generated automatically if empty |
 | `static_dir` | Frontend static assets directory; empty uses the embedded build |
 | `open_browser` | Open the browser after startup; `true` by default on Windows, `false` elsewhere |
+| `trusted_proxies` | Trusted reverse-proxy networks (CIDR, comma-separated); empty means direct exposure and `X-Forwarded-*` headers are ignored |
 | `settings.*` | Site settings from the admin panel; meanings and defaults under "Site settings" below |
 
 Semantics of `settings`: **every key present in the file overrides the admin panel on each startup**; keys you leave out are untouched (values edited in the panel survive restarts). Invalid values (e.g. an out-of-range `max_upload_mb`) make startup fail with a clear error instead of being silently ignored. Unknown keys in the file are rejected as well.
@@ -228,6 +235,11 @@ Runtime settings live in the database and take effect immediately:
 | `allow_upload` | on | Whether uploading is open |
 | `max_upload_mb` | `20` | Per-file size limit (1–1024 MB) |
 | `max_batch` | `10` | Max number of files per batch upload (1–50) |
+| `hotlink_whitelist` | empty | Hotlink IP/CIDR whitelist (visitor networks, comma-separated); empty = off |
+| `hotlink_referers` | empty | Hotlink referer whitelist (sites allowed to embed, comma-separated); empty = off |
+| `hotlink_embed_only` | off | Embedded-loads-only: opening an image in a new tab / address bar returns an empty response; only image elements inside web pages load |
+
+> For hotlink protection, **matching either whitelist grants access**, and logged-in users are unaffected. Behind a reverse proxy, IP detection requires `trusted_proxies`. Semantics and caveats: see the [User Guide](docs/user-guide.md).
 
 ## Usage
 
@@ -236,7 +248,7 @@ Runtime settings live in the database and take effect immediately:
 ### Web UI
 
 - **Home**: multi-select upload with per-file progress, paginated browsing of "My images" / "All images" (admin only), one-click link copying, deletion
-- **Admin panel** (admin): site name, toggles and limits; visual Lsky Pro migration (progress, cancel, URL-mapping CSV)
+- **Admin panel** (admin): site name, toggles and limits; hotlink protection (IP / embedding-domain whitelists, embedded-loads-only mode); visual Lsky Pro migration (progress, cancel, URL-mapping CSV)
 
 ### API
 

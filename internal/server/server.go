@@ -80,14 +80,14 @@ func (s *Server) Handler() http.Handler { return s.securityHeaders(s.logRequests
 
 // ---------------------------------------------------------------- 外链访问控制
 
-// hotlinkGuard 实现外链防盗链（§3.5）：两个白名单（访客 IP/网段、引用站点
-// 域名）都为空时不做任何检测，行为与未加 guard 完全一致；启用后按序判定：
+// hotlinkGuard 实现外链防盗链（§3.5）：未启用任何机制（两个白名单都为空
+// 且未开仅嵌图）时不做任何检测，行为与未加 guard 完全一致。启用后按序判定：
 //
-//	ClientIP 在 IP 白名单内 → 放行；
-//	域名白名单启用且无有效 Referer → 放行（空 Referer 策略，只作用于域名机制，
-//	不影响 IP 白名单的拦截）；
-//	域名白名单启用且 Referer 域名命中 → 放行；
-//	管理员 Cookie（登录时下发的 JWT）有效 → 放行，管理员无需把自己的 IP 入白名单；
+//	仅嵌图模式下，Sec-Fetch-Dest 存在且非 image（新标签页/地址栏等文档级导航）
+//	→ 只认 IP 白名单与管理员 Cookie，Referer/空 Referer 放行不适用；
+//	嵌图加载（dest=image 或缺失）→ ClientIP 在 IP 白名单内放行；域名白名单启用
+//	且无有效 Referer（空 Referer 策略）或 Referer 域名命中放行；管理员 Cookie
+//	（登录时下发的 JWT）有效放行，管理员无需把自己的 IP 入白名单；
 //	其余 → 200 空响应体，不暴露拦截行为。
 func (s *Server) hotlinkGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,8 +108,21 @@ func (s *Server) hotlinkAllowed(r *http.Request) bool {
 		return true
 	}
 	rules := s.settings.HotlinkRules()
-	if len(rules.Nets) == 0 && len(rules.Domains) == 0 {
-		return true // 两个白名单都为空：检测未启用
+	hasWhitelist := len(rules.Nets) > 0 || len(rules.Domains) > 0
+	if !hasWhitelist && !rules.EmbedOnly {
+		return true // 防盗链完全未启用
+	}
+	if rules.EmbedOnly && !isEmbeddedImageLoad(r) {
+		// 仅嵌图：文档级导航（新标签页/地址栏/iframe 等）不套用 Referer 与
+		// 空 Referer 放行——否则从白名单站点"在新标签页打开图片"即可绕过。
+		// 只认 IP 白名单与管理员 Cookie。
+		if len(rules.Nets) > 0 && ipInNets(auth.ClientIP(r, s.trustedProxies), rules.Nets) {
+			return true
+		}
+		return s.sessionAllowed(r)
+	}
+	if !hasWhitelist {
+		return true // 仅启用仅嵌图模式：嵌图加载不受白名单限制
 	}
 	if len(rules.Nets) > 0 && ipInNets(auth.ClientIP(r, s.trustedProxies), rules.Nets) {
 		return true
@@ -121,16 +134,34 @@ func (s *Server) hotlinkAllowed(r *http.Request) bool {
 			return true
 		}
 	}
-	if s.auth != nil {
-		if c, err := r.Cookie(auth.AdminCookieName); err == nil {
-			// 角色取自 JWT claims 不查库：角色变更在 token 过期后生效，
-			// 对图片访问这一读路径可接受（§3.2）。
-			if claims, err := s.auth.Parse(c.Value); err == nil && claims.Role == model.RoleAdmin {
-				return true
-			}
-		}
+	return s.sessionAllowed(r)
+}
+
+// sessionAllowed 校验登录会话 Cookie（登录时下发的 JWT）：站内登录用户视为
+// 可信——图库的「打开原图」是新标签页导航（dest=document），不能被仅嵌图
+// 模式误伤；开放注册时注册用户因此可绕过白名单取图，属已接受的取舍（§3.5）。
+func (s *Server) sessionAllowed(r *http.Request) bool {
+	if s.auth == nil {
+		return false
 	}
-	return false
+	c, err := r.Cookie(auth.SessionCookieName)
+	if err != nil {
+		return false
+	}
+	_, err = s.auth.Parse(c.Value)
+	return err == nil
+}
+
+// isEmbeddedImageLoad 报告请求是否为网页图片元素加载：Fetch Metadata 的
+// Sec-Fetch-Dest 为 image，或缺失（老浏览器/非浏览器客户端按原逻辑放行）。
+// 该头由浏览器强制附加，JS 不可伪造或移除；文档级导航（新标签页/地址栏）为 document。
+func isEmbeddedImageLoad(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Dest") {
+	case "", "image":
+		return true
+	default:
+		return false
+	}
 }
 
 // ipInNets 报告点分 IP 字符串是否落在任一网段内（auth.ipInNets 的本地形态）。

@@ -1,10 +1,11 @@
 import { ApiError, getToken, request, toApiError } from './client'
 import type { SiteConfig } from './config'
 
-/** 后台设置：在公开配置基础上追加两个外链白名单（公开接口不返回这两项，§3.3）。 */
+/** 后台设置：在公开配置基础上追加防盗链配置（公开接口不返回这几项，§3.3）。 */
 export type AdminSettings = SiteConfig & {
   hotlink_whitelist: string
   hotlink_referers: string
+  hotlink_embed_only: boolean
 }
 
 export type SettingsPatch = Partial<AdminSettings>

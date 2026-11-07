@@ -327,6 +327,11 @@ footer p{margin-top:6px}
         <h3>在线管理后台</h3>
         <p>站点名称、注册/上传开关、单图与批量上限，改完即时生效，无需重启。</p>
       </div>
+      <div class="feat">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        <h3>外链防盗链</h3>
+        <p>访客 IP/网段、引用站点域名双白名单与仅嵌图模式（防 F12 新标签页打开）；白名单外的请求返回空内容，登录用户不受限。</p>
+      </div>
     </div>
   </div>
 </section>
@@ -587,8 +592,19 @@ BBCode:    [img]http://你的域名/i/xxxx.png[/img]</code></pre>
         <tr><td>允许上传图片</td><td>开</td><td>全站上传总开关，紧急情况可一键停上传</td></tr>
         <tr><td>单图大小上限（MB）</td><td>20</td><td>单个文件最大多大（1~1024）</td></tr>
         <tr><td>单批上传数量上限</td><td>10</td><td>一次最多同时选几张（1~50）</td></tr>
+        <tr><td>外链 IP 白名单</td><td>空</td><td><b>防盗链</b>：填访客 IP 或网段（如 <code>203.0.113.7</code>、<code>192.168.1.0/24</code>，每行一个），只有这些网络能加载外链图片，其余请求返回空内容</td></tr>
+        <tr><td>外链引用域名白名单</td><td>空</td><td><b>防盗链</b>：填允许嵌图的站点域名（如 <code>example.com</code>，每行一个，子域名自动放行），这些站点页面里的图片对它的所有访客可见</td></tr>
+        <tr><td>仅允许嵌图加载</td><td>关</td><td><b>防盗链</b>：开启后，用开发者工具/右键「在新标签页打开图片」或地址栏直接打开图片会返回空内容，只有网页里的图片元素能正常加载</td></tr>
       </table>
       <p>改完点「<b>保存设置</b>」，<b>立即生效，不用重启程序</b>。</p>
+      <p><b>关于防盗链（两个白名单 + 仅嵌图）</b>：</p>
+      <ul>
+        <li>全部留空/关闭 = 不启用检测，行为与从前完全一样；启用后<b>命中任意一项白名单即可访问</b>。</li>
+        <li>「外链 IP 白名单」控制<b>哪些网络的访客</b>能看到图——嵌图页面里是访客的浏览器直接来取图，看的是<b>访客的 IP</b>，不是对方网站服务器的 IP。适合"只允许公司/家里网络查看"。</li>
+        <li>「外链引用域名白名单」控制<b>哪些网站可以嵌图</b>——填了 <code>example.com</code>，它页面里的图片对所有访客可见；其他站点嵌图显示为空白；地址栏直开、RSS/Markdown 阅读器等无来源页面场景不受影响。</li>
+        <li>「仅允许嵌图加载」利用浏览器强制的 Sec-Fetch-Dest 标记区分"网页里的图片"与"独立页面打开"：开启后从白名单站点用 F12/右键新标签页打开图片也会被拦；同时<b>地址栏直接打开</b>也会失效（两者在服务端不可区分），RSS 阅读器、老浏览器等不上报该标记的客户端不受影响。</li>
+        <li><b>登录用户（含管理员）不受以上限制</b>，图库里看原图与「打开原图」都正常；图片部署在 Nginx/Caddy 等反代之后时需设置 <code>trusted_proxies</code>，否则 IP 白名单看到的全是代理地址而非访客真实 IP。</li>
+      </ul>
 
       <h4>5.2 站点行为小抄</h4>
       <ul>
@@ -662,7 +678,10 @@ BBCode:    [img]http://你的域名/i/xxxx.png[/img]</code></pre>
     "allow_register": true,
     "allow_upload": true,
     "max_upload_mb": 20,
-    "max_batch": 10
+    "max_batch": 10,
+    "hotlink_whitelist": "",
+    "hotlink_referers": "",
+    "hotlink_embed_only": false
   }
 }</code></pre>
       <blockquote><p>⚠️ <code>jwt_secret</code> 留空会自动生成并保存在数据目录，一般不用管；多实例/容器部署且想固定登录状态时才显式指定。<code>settings</code> 里的值填非法（比如上限超范围）会导致程序拒绝启动并提示原因——按提示改回来即可。</p></blockquote>
@@ -807,8 +826,19 @@ BBCode:    [img]http://your-domain/i/xxxx.png[/img]</code></pre>
         <tr><td>Allow uploads</td><td>On</td><td>The site-wide upload master switch — a one-click emergency stop</td></tr>
         <tr><td>Max image size (MB)</td><td>20</td><td>Largest single file allowed (1–1024)</td></tr>
         <tr><td>Max batch size</td><td>10</td><td>Most files selectable in one go (1–50)</td></tr>
+        <tr><td>Hotlink IP whitelist</td><td>Empty</td><td><b>Anti-hotlinking</b>: visitor IPs or CIDR ranges (e.g. <code>203.0.113.7</code>, <code>192.168.1.0/24</code>, one per line); only these networks can load image links, everyone else gets an empty response</td></tr>
+        <tr><td>Hotlink referer whitelist</td><td>Empty</td><td><b>Anti-hotlinking</b>: site domains allowed to embed your images (e.g. <code>example.com</code>, one per line, subdomains included); images embedded on those sites are visible to all of their visitors</td></tr>
+        <tr><td>Embedded loads only</td><td>Off</td><td><b>Anti-hotlinking</b>: when on, opening an image as a standalone page (DevTools "open in new tab", right-click → new tab, address bar) returns an empty response; only image elements inside web pages load normally</td></tr>
       </table>
       <p>Click <b>Save settings</b> and changes take effect <b>immediately — no restart needed</b>.</p>
+      <p><b>About hotlink protection (two whitelists + embedded-loads-only)</b>:</p>
+      <ul>
+        <li>Leave everything empty/off = detection disabled, exactly the old behavior; when enabled, <b>matching any one whitelist grants access</b>.</li>
+        <li>The <b>IP whitelist</b> controls which networks' visitors can see the images — embedded <code>&lt;img&gt;</code> tags make the <b>visitor's browser</b> fetch the image directly, so it's the <b>visitor's IP</b> that matters, not the embedding site's server IP. Best for "only my office/home network may view".</li>
+        <li>The <b>referer whitelist</b> controls which sites may embed — with <code>example.com</code> listed, images on its pages are visible to all its visitors; embeds from other sites render blank; direct address-bar opens, RSS/Markdown readers and other no-referrer contexts are unaffected.</li>
+        <li><b>Embedded loads only</b> uses the browser-enforced Sec-Fetch-Dest marker to tell "an image inside a web page" from "a standalone page": with it on, opening an image in a new tab from a whitelisted site (F12/right-click) is blocked too. Note it also disables <b>direct address-bar access</b> (the two are indistinguishable server-side); RSS readers and older browsers that don't send the marker are unaffected.</li>
+        <li><b>Logged-in users (admins included) are never restricted</b> — viewing originals in the gallery and the "Open original" button keep working. When pixsy runs behind Nginx/Caddy, set <code>trusted_proxies</code>, otherwise the IP whitelist sees only the proxy's address instead of the visitor's real IP.</li>
+      </ul>
 
       <h4>5.2 Behavior worth knowing</h4>
       <ul>
@@ -882,7 +912,10 @@ BBCode:    [img]http://your-domain/i/xxxx.png[/img]</code></pre>
     "allow_register": true,
     "allow_upload": true,
     "max_upload_mb": 20,
-    "max_batch": 10
+    "max_batch": 10,
+    "hotlink_whitelist": "",
+    "hotlink_referers": "",
+    "hotlink_embed_only": false
   }
 }</code></pre>
       <blockquote><p>⚠️ Leave <code>jwt_secret</code> empty and one is generated automatically into the data directory — normally you never touch it; set it explicitly only when running multiple instances/containers and you want logins to persist. Invalid values in <code>settings</code> (e.g. a limit out of range) make the program refuse to start with a clear reason — fix it as instructed.</p></blockquote>

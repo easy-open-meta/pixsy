@@ -200,6 +200,7 @@ After logging in with the admin account, a **Admin panel** entry appears in the 
 | Max batch size | 10 | Most files selectable in one go (1–50) |
 | Hotlink IP whitelist | Empty | **Anti-hotlinking**: visitor IPs or CIDR ranges (e.g. `203.0.113.7`, `192.168.1.0/24`, one per line); only these networks can load image links, everyone else gets an empty response |
 | Hotlink referer whitelist | Empty | **Anti-hotlinking**: site domains allowed to embed your images (e.g. `example.com`, one per line, subdomains included); images embedded on those sites are visible to all of their visitors |
+| Embedded loads only | Off | **Anti-hotlinking**: when on, opening an image as a standalone page (DevTools "open in new tab", right-click → new tab, address bar) returns an empty response; only image elements inside web pages (`<img>`, CSS backgrounds) load normally |
 
 Click **Save settings** and changes take effect **immediately — no restart needed**.
 
@@ -208,8 +209,10 @@ Click **Save settings** and changes take effect **immediately — no restart nee
 - Leave both empty = detection disabled, exactly the old behavior; filling either one enables it, and **matching either whitelist grants access**.
 - The **IP whitelist** controls *which networks' visitors* can see the images — embedded `<img>` tags make the **visitor's browser** fetch the image directly, so it's the **visitor's IP** that matters, not the embedding site's server IP. Best for "only my office/home network may view".
 - The **referer whitelist** controls *which sites may embed* — with `example.com` listed, images on its pages are visible to all its visitors; embeds from other sites render blank. Opening the image URL directly, RSS/Markdown readers and other no-referrer contexts are unaffected.
-- **Logged-in admins are never restricted** by the whitelists — no need to add your own IP.
+- **Embedded loads only** uses the browser-enforced Sec-Fetch-Dest marker to tell "an image inside a web page" from "a standalone page": with it on, opening an image in a new tab from a whitelisted site (F12/right-click) is blocked too. Note it also disables **direct address-bar access** (the two are indistinguishable server-side); RSS readers and older browsers that don't send the marker are unaffected.
+- **Logged-in users (admins included) are never restricted** by any of the above — no need to add your own IP; viewing originals in the gallery and the "Open original" button keep working.
 - Two caveats: ① Referer can be forged by bad actors; the domain whitelist stops casual leeching, it is not strict access control. ② If your image links sit behind a CDN, cache hits bypass the origin whitelist entirely — disable CDN caching on image paths or configure equivalent IP rules at the CDN when the whitelists are enabled.
+- When pixsy runs behind Nginx/Caddy or another reverse proxy, set `trusted_proxies` (trusted proxy networks, e.g. `127.0.0.1`) via startup flags or the config file — otherwise the IP whitelist sees only the proxy's address instead of the visitor's real IP.
 
 ### 5.2 Behavior worth knowing
 
@@ -323,7 +326,8 @@ Full `pixsy.json` example:
     "max_upload_mb": 20,
     "max_batch": 10,
     "hotlink_whitelist": "",
-    "hotlink_referers": ""
+    "hotlink_referers": "",
+    "hotlink_embed_only": false
   }
 }
 ```

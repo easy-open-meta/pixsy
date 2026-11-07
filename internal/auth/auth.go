@@ -35,10 +35,10 @@ const (
 	tokenIssuer   = "pixsy"
 	tokenAudience = "pixsy-api"
 
-	// AdminCookieName 是登录成功时下发的管理员会话 Cookie（值即 JWT）。
-	// 图片直出路由用它识别管理员、放行外链白名单（§3.5）——<img> 加载带不上
-	// Authorization 头，只能借助浏览器自动携带的 Cookie。
-	AdminCookieName = "pixsy_admin"
+	// SessionCookieName 是登录成功时下发的会话 Cookie（值即 JWT，任何角色）。
+	// 图片直出路由用它识别登录用户、放行外链防盗链（§3.5）——<img> 加载与
+	// target=_blank 导航带不上 Authorization 头，只能借助浏览器自动携带的 Cookie。
+	SessionCookieName = "pixsy_session"
 )
 
 // ErrInvalidToken is returned by Parse for any unusable token.

@@ -24,6 +24,9 @@ const (
 	// 外链防盗链白名单（§3.5）：逗号/换行分隔，空串表示未启用。
 	KeyHotlinkWhitelist = "hotlink_whitelist" // 访客 IP/CIDR 网段
 	KeyHotlinkReferers  = "hotlink_referers"  // 允许引用的站点域名
+	// 仅嵌图模式：Fetch Metadata 的 Sec-Fetch-Dest 非 image 的文档级导航
+	// （新标签页/地址栏直开）不放行，只认 IP 白名单与管理员 Cookie。
+	KeyHotlinkEmbedOnly = "hotlink_embed_only"
 )
 
 // DefaultMaxBatch 是单次批量上传文件数的默认上限（§3.7）。
@@ -48,6 +51,7 @@ type Values struct {
 	MaxBatch         int    `json:"max_batch"`
 	HotlinkWhitelist string `json:"hotlink_whitelist"`
 	HotlinkReferers  string `json:"hotlink_referers"`
+	HotlinkEmbedOnly bool   `json:"hotlink_embed_only"`
 }
 
 // Public 返回公开配置视图：GET /api/v1/config 面向未登录访客，
@@ -91,6 +95,7 @@ type Patch struct {
 	MaxBatch         *int    `json:"max_batch"`
 	HotlinkWhitelist *string `json:"hotlink_whitelist"`
 	HotlinkReferers  *string `json:"hotlink_referers"`
+	HotlinkEmbedOnly *bool   `json:"hotlink_embed_only"`
 }
 
 // PatchFromFile 把配置文件里的 settings 段转换为 Patch（只含文件里出现的项）。
@@ -106,14 +111,16 @@ func PatchFromFile(f *config.FileSettings) Patch {
 		MaxBatch:         f.MaxBatch,
 		HotlinkWhitelist: f.HotlinkWhitelist,
 		HotlinkReferers:  f.HotlinkReferers,
+		HotlinkEmbedOnly: f.HotlinkEmbedOnly,
 	}
 }
 
 // HotlinkRules 是外链访问控制的解析快照（§3.5）。
-// Nets 与 Domains 均空表示功能未启用（两个白名单都为空）。
+// EmbedOnly 独立于两个白名单生效：仅开启它时，嵌图加载不受限、文档级导航一律拦截。
 type HotlinkRules struct {
-	Nets    []*net.IPNet // 访客 IP/CIDR 白名单
-	Domains []string     // 允许引用的站点域名（小写）
+	Nets      []*net.IPNet // 访客 IP/CIDR 白名单
+	Domains   []string     // 允许引用的站点域名（小写）
+	EmbedOnly bool         // 仅嵌图模式：Sec-Fetch-Dest 非 image 的文档级导航不放行
 }
 
 // Store 把 settings 常驻内存：读路径不加锁地取快照，写路径落库后立即刷新，
@@ -139,6 +146,7 @@ func Load(ctx context.Context, db *sql.DB, seedMaxUploadMB int) (*Store, error) 
 		KeyMaxBatch:         strconv.Itoa(d.MaxBatch),
 		KeyHotlinkWhitelist: d.HotlinkWhitelist,
 		KeyHotlinkReferers:  d.HotlinkReferers,
+		KeyHotlinkEmbedOnly: strconv.FormatBool(d.HotlinkEmbedOnly),
 	}
 	for k, v := range seeds {
 		if _, err := db.ExecContext(ctx,
@@ -171,10 +179,11 @@ func (s *Store) HotlinkRules() HotlinkRules {
 	return s.rules
 }
 
-// rulesFor 解析 Values 里的两个白名单。写入路径已校验过，这里遇到非法条目
+// rulesFor 解析 Values 里的防盗链配置。写入路径已校验过，这里遇到非法条目
 // （如手工改库）跳过该条目即可，不让单条脏数据拖垮图片直出。
 func rulesFor(v Values) HotlinkRules {
 	var rules HotlinkRules
+	rules.EmbedOnly = v.HotlinkEmbedOnly
 	if v.HotlinkWhitelist != "" {
 		if nets, err := config.ParseCIDRs(v.HotlinkWhitelist); err == nil {
 			rules.Nets = nets
@@ -238,6 +247,9 @@ func (s *Store) Update(ctx context.Context, p Patch) (Values, error) {
 		}
 		next.HotlinkReferers = n
 	}
+	if p.HotlinkEmbedOnly != nil {
+		next.HotlinkEmbedOnly = *p.HotlinkEmbedOnly
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -253,6 +265,7 @@ func (s *Store) Update(ctx context.Context, p Patch) (Values, error) {
 		{KeyMaxBatch, strconv.Itoa(next.MaxBatch)},
 		{KeyHotlinkWhitelist, next.HotlinkWhitelist},
 		{KeyHotlinkReferers, next.HotlinkReferers},
+		{KeyHotlinkEmbedOnly, strconv.FormatBool(next.HotlinkEmbedOnly)},
 	}
 	for _, it := range stmts {
 		if _, err := tx.ExecContext(ctx,
@@ -322,6 +335,11 @@ func readAll(ctx context.Context, db *sql.DB, d Values) (Values, error) {
 	if v, ok := raw[KeyHotlinkReferers]; ok {
 		if n, err := normalizeDomainList(v); err == nil {
 			out.HotlinkReferers = n
+		}
+	}
+	if v, ok := raw[KeyHotlinkEmbedOnly]; ok {
+		if b, err := strconv.ParseBool(v); err == nil {
+			out.HotlinkEmbedOnly = b
 		}
 	}
 	return out, nil

@@ -28,6 +28,7 @@ pixsy 是一个用 Go + Vue 3 编写的自托管图床服务。前端构建产�
 - **多种外链格式** — URL / Markdown / HTML / BBCode 一键复制
 - **用户与权限** — JWT 认证；首个注册用户自动成为管理员；登录接口限速防爆破
 - **在线管理后台** — 站点名称、开放注册、开放上传、单图/批量上限，修改即时生效、无需重启
+- **外链防盗链（可选）** — 访客 IP/网段与引用站点域名双白名单、仅嵌图模式（防 F12 新标签页打开图片），非白名单请求返回空内容；登录用户不受限
 - **原图直出** — 支持 HTTP Range 请求，浏览器与下载工具行为正常
 
 ## 环境要求
@@ -167,6 +168,7 @@ schtasks /Create /TN pixsy /SC ONSTART /RU SYSTEM /TR "D:\pixsy\pixsy-windows-am
 | `--jwt-secret` | `PIXSY_JWT_SECRET` | 空 | JWT 签名密钥；留空则自动生成并存入数据目录 |
 | `--static-dir` | `PIXSY_STATIC_DIR` | 空 | 前端静态资源目录；留空使用内嵌产物（开发热更新用） |
 | `--open-browser` | `PIXSY_OPEN_BROWSER` | Windows `true`，其他平台 `false` | 启动后自动用默认浏览器打开页面；`--open-browser=false` 可关闭 |
+| `--trusted-proxies` | `PIXSY_TRUSTED_PROXIES` | 空 | 可信反向代理网段（CIDR，逗号分隔）；留空忽略 `X-Forwarded-*` 头。反代/CDN 部署下必须配置，客户端 IP（限速、外链防盗链）才能取到真实访客地址 |
 
 ### 配置文件（pixsy.json）
 
@@ -187,12 +189,16 @@ schtasks /Create /TN pixsy /SC ONSTART /RU SYSTEM /TR "D:\pixsy\pixsy-windows-am
   "base_url": "",
   "jwt_secret": "",
   "static_dir": "",
+  "trusted_proxies": "",
   "settings": {
     "site_name": "pixsy",
     "allow_register": true,
     "allow_upload": true,
     "max_upload_mb": 20,
-    "max_batch": 10
+    "max_batch": 10,
+    "hotlink_whitelist": "",
+    "hotlink_referers": "",
+    "hotlink_embed_only": false
   }
 }
 ```
@@ -206,6 +212,7 @@ schtasks /Create /TN pixsy /SC ONSTART /RU SYSTEM /TR "D:\pixsy\pixsy-windows-am
 | `jwt_secret` | JWT 签名密钥；留空自动生成 |
 | `static_dir` | 前端静态资源目录；留空使用内嵌产物 |
 | `open_browser` | 启动后自动打开浏览器；Windows 默认 `true`，其他平台默认 `false` |
+| `trusted_proxies` | 可信反向代理网段（CIDR，逗号分隔）；空表示直连部署、不信任 `X-Forwarded-*` 头 |
 | `settings.*` | 后台页面的站点设置，含义与默认值见下方「站点设置」 |
 
 `settings` 段的语义：**写进配置文件的项，每次启动都会强制覆盖后台页面的修改**；没写的项不受影响（后台改过的值跨重启保留）。设置值非法（如 `max_upload_mb` 超出范围）会让启动直接失败并提示原因，避免配置静默失效。配置文件里拼错的键同样会报错。
@@ -231,6 +238,11 @@ data/
 | `allow_upload` | 开 | 是否开放上传 |
 | `max_upload_mb` | `20` | 单图大小上限（1~1024 MB） |
 | `max_batch` | `10` | 单批上传文件数上限（1~50） |
+| `hotlink_whitelist` | 空 | 外链 IP/CIDR 白名单（访客网段，逗号分隔）；空 = 不启用 |
+| `hotlink_referers` | 空 | 外链引用域名白名单（允许嵌图的站点，逗号分隔）；空 = 不启用 |
+| `hotlink_embed_only` | 关 | 仅嵌图模式：新标签页/地址栏打开图片返回空内容，只有网页里的图片元素可加载 |
+
+> 防盗链两项白名单**任一命中即放行**，登录用户不受限；反代部署下 IP 判定需配 `trusted_proxies`。语义与注意事项详见 [用户指南](docs/用户指南.md)。
 
 ## 使用
 
@@ -239,7 +251,7 @@ data/
 ### Web 界面
 
 - **首页**：多选上传（逐文件进度条）、「我的图片 / 全部图片」（后者仅管理员）分页浏览、一键复制外链、删除
-- **后台**（管理员）：站点名称与各项开关、上限调整；从 Lsky Pro 可视化迁移图片（进度、取消、映射 CSV）
+- **后台**（管理员）：站点名称与各项开关、上限调整；外链防盗链（IP/引用域名白名单、仅嵌图模式）；从 Lsky Pro 可视化迁移图片（进度、取消、映射 CSV）
 
 ### API
 

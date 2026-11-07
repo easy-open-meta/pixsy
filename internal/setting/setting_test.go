@@ -16,10 +16,13 @@ func intPtr(n int) *int { return &n }
 
 func strPtr(s string) *string { return &s }
 
+func boolPtr(b bool) *bool { return &b }
+
 func TestPatchFromFile(t *testing.T) {
 	name, mb := "我的图床", 50
 	ip, domain := "203.0.113.7", "example.com"
-	p := PatchFromFile(&config.FileSettings{SiteName: &name, MaxUploadMB: &mb, HotlinkWhitelist: &ip, HotlinkReferers: &domain})
+	embed := true
+	p := PatchFromFile(&config.FileSettings{SiteName: &name, MaxUploadMB: &mb, HotlinkWhitelist: &ip, HotlinkReferers: &domain, HotlinkEmbedOnly: &embed})
 	if p.SiteName == nil || *p.SiteName != name {
 		t.Fatalf("SiteName 未映射: %+v", p)
 	}
@@ -31,6 +34,9 @@ func TestPatchFromFile(t *testing.T) {
 	}
 	if p.HotlinkReferers == nil || *p.HotlinkReferers != domain {
 		t.Fatalf("HotlinkReferers 未映射: %+v", p)
+	}
+	if p.HotlinkEmbedOnly == nil || !*p.HotlinkEmbedOnly {
+		t.Fatalf("HotlinkEmbedOnly 未映射: %+v", p)
 	}
 	if p.AllowRegister != nil || p.AllowUpload != nil || p.MaxBatch != nil {
 		t.Fatalf("文件里未出现的项应为 nil: %+v", p)
@@ -174,6 +180,7 @@ func TestHotlinkWhitelistPersist(t *testing.T) {
 	if _, err := first.Update(ctx, Patch{
 		HotlinkWhitelist: strPtr("203.0.113.0/24"),
 		HotlinkReferers:  strPtr("example.com"),
+		HotlinkEmbedOnly: boolPtr(true),
 	}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -183,11 +190,11 @@ func TestHotlinkWhitelistPersist(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 	v := second.Get()
-	if v.HotlinkWhitelist != "203.0.113.0/24" || v.HotlinkReferers != "example.com" {
+	if v.HotlinkWhitelist != "203.0.113.0/24" || v.HotlinkReferers != "example.com" || !v.HotlinkEmbedOnly {
 		t.Fatalf("白名单应跨重启保留: %+v", v)
 	}
 	rules := second.HotlinkRules()
-	if len(rules.Nets) != 1 || len(rules.Domains) != 1 {
+	if len(rules.Nets) != 1 || len(rules.Domains) != 1 || !rules.EmbedOnly {
 		t.Fatalf("重启后解析快照不符: %+v", rules)
 	}
 }

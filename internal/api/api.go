@@ -232,23 +232,24 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpx.Fail(w, http.StatusInternalServerError, "签发令牌失败")
 		return
 	}
-	s.setAdminCookie(w, r, token)
+	s.setSessionCookie(w, r, token)
 	httpx.Data(w, http.StatusOK, map[string]any{"token": token, "user": u})
 }
 
-// setAdminCookie 登录成功时下发管理员会话 Cookie（值即 JWT，§3.5）：
-// 图片直出路由（/i/、/t/）靠它识别管理员并放行外链白名单。
+// setSessionCookie 登录成功时下发会话 Cookie（值即 JWT，任何角色，§3.5）：
+// 图片直出路由（/i/、/t/）靠它识别登录用户并放行外链防盗链——<img> 加载与
+// 「打开原图」的 target=_blank 导航都带不上 Authorization 头。
 // HttpOnly + SameSite=Lax：JS 不可读；第三方站点嵌图时浏览器不携带该
-// Cookie，管理员凭证不会混入外链请求。无服务端注销接口，Cookie 随
+// Cookie，登录凭证不会混入外链请求。无服务端注销接口，Cookie 随
 // token 同期（TokenTTL）自然过期。
-func (s *Server) setAdminCookie(w http.ResponseWriter, r *http.Request, token string) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
 	// security: Secure 只在确定走 HTTPS 时设置（直连 TLS，或可信代理声明的
 	// X-Forwarded-Proto）——直连 HTTP 部署误设会让浏览器丢弃 Cookie，
-	// 管理员图库预览静默失效。
+	// 登录用户的外链访问静默失效。
 	secure := r.TLS != nil ||
 		(auth.RemoteAddrInNets(r, s.trustedProxies) && r.Header.Get("X-Forwarded-Proto") == "https")
 	http.SetCookie(w, &http.Cookie{
-		Name:     auth.AdminCookieName,
+		Name:     auth.SessionCookieName,
 		Value:    token,
 		Path:     "/",
 		MaxAge:   int(auth.TokenTTL.Seconds()),
