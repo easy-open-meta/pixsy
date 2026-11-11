@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t pixsy:latest .
+        run: docker build -t yjj6731/pixsy:latest .
 
       # 先建新容器再删旧的会有端口冲突，因此顺序为：停旧的 → 起新的（秒级中断）
       - name: (Re)start container
@@ -82,7 +82,7 @@ jobs:
           docker run -d --name pixsy --restart unless-stopped \
             -p 127.0.0.1:${HOST_PORT}:8080 \
             -v /opt/pixsy/data:/app/data \
-            pixsy:latest
+            yjj6731/pixsy:latest
 
       # 冒烟：在容器内访问 /api/v1/config（响应须含 site_name）。
       # 不用 runner 自己的 127.0.0.1 探测：runner 可能是容器模式（job 跑在容器里），
