@@ -18,6 +18,42 @@ export function updateSettings(patch: SettingsPatch): Promise<AdminSettings> {
   return request<AdminSettings>('PUT', '/admin/settings', patch)
 }
 
+// ---------------------------------------------------------------- 用户管理
+
+export type UserRole = 'admin' | 'user'
+
+export interface AdminUser {
+  id: number
+  username: string
+  role: UserRole
+  created_at: string
+}
+
+export interface UserListResult {
+  items: AdminUser[]
+  total: number
+  page: number
+  limit: number
+}
+
+export function getUsers(params: { page: number; limit: number; search?: string }): Promise<UserListResult> {
+  const query = new URLSearchParams({ page: String(params.page), limit: String(params.limit) })
+  if (params.search) query.set('search', params.search)
+  return request<UserListResult>('GET', `/admin/users?${query.toString()}`)
+}
+
+export function createUser(data: { username: string; password: string; role: UserRole }): Promise<{ user: AdminUser }> {
+  return request<{ user: AdminUser }>('POST', '/admin/users', data)
+}
+
+export function updateUser(id: number, data: { role?: UserRole; password?: string }): Promise<{ user: AdminUser }> {
+  return request<{ user: AdminUser }>('PUT', `/admin/users/${id}`, data)
+}
+
+export function deleteUser(id: number): Promise<void> {
+  return request<void>('DELETE', `/admin/users/${id}`)
+}
+
 // ---------------------------------------------------------------- Lsky 迁移
 
 export interface LskyMigrationInput {

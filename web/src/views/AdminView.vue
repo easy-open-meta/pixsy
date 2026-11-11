@@ -11,6 +11,7 @@ import {
 } from '../api/admin'
 import type { AdminSettings, LskyMigrationStatus } from '../api/admin'
 import { errorMessage } from '../api/client'
+import AdminUsersPanel from '../components/AdminUsersPanel.vue'
 import { useConfigStore } from '../stores/config'
 import { useToastStore } from '../stores/toast'
 
@@ -191,7 +192,8 @@ async function downloadMapping(): Promise<void> {
 </script>
 
 <template>
-  <div class="container narrow">
+  <div class="admin-page">
+    <div class="container narrow">
     <section class="card">
       <h1>站点设置</h1>
       <p class="small muted">保存后立即生效，影响全站的注册与上传行为。</p>
@@ -350,6 +352,11 @@ async function downloadMapping(): Promise<void> {
         </p>
       </div>
     </section>
+    </div>
+
+    <div class="users-col">
+      <AdminUsersPanel />
+    </div>
   </div>
 </template>
 
@@ -359,6 +366,36 @@ async function downloadMapping(): Promise<void> {
   flex-direction: column;
   gap: var(--space-4);
   max-width: 560px;
+}
+
+/* 用户管理表格较宽，与设置表单共用两栏式响应布局：宽屏并排，窄屏堆叠。 */
+.admin-page {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: 0 var(--space-4);
+}
+
+.admin-page > .narrow {
+  flex: 1 1 420px;
+  padding: 0;
+  max-width: none;
+}
+
+.users-col {
+  flex: 1 1 520px;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .admin-page {
+    flex-direction: column;
+    padding: 0 var(--space-4);
+  }
 }
 
 .check-row {
